@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Trash2, Truck, Clock, Warehouse } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Checkbox, Empty, message, Popconfirm } from 'antd';
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-react';
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd';
 import { db } from './firebase';
 // SE ACTUALIZARON LAS IMPORTACIONES: Se agregaron query, orderBy y limit
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
