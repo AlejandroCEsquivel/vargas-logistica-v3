@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; // Se agregaron Modal y Radio
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; 
 import { db } from './firebase';
 // SE ACTUALIZARON LAS IMPORTACIONES: Se agregaron query, orderBy y limit
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
@@ -90,7 +90,7 @@ function App() {
     
     if (coleccion === 'vehiculos') {
       if (!nuevoVehiculo) return;
-      objetoNuevo = { nombre: nuevoVehiculo, estado: 'Disponible' };
+      objetoNuevo = { nombre: nuevoVehiculo, estado: 'Listo' };
       await addDoc(collection(db, "vehiculos"), objetoNuevo);
       setNuevoVehiculo('');
     } 
@@ -134,15 +134,14 @@ function App() {
     }
   };
 
-  // --- LÓGICA DE DISPONIBILIDAD ---
+  // --- LÓGICA DE DISPONIBILIDAD PARA EL BOTÓN ---
   const handleAccionDisponibilidad = async (record) => {
-    if (record.estado === 'Disponible' || !record.estado) {
+    if (record.estado === 'Listo' || !record.estado) {
       setUnidadAfectada(record);
       setMostrarModalMotivo(true);
     } else {
-      // Habilitar de nuevo
       try {
-        await updateDoc(doc(db, "vehiculos", record.id), { estado: 'Disponible' });
+        await updateDoc(doc(db, "vehiculos", record.id), { estado: 'Listo' });
         message.success(`Unidad ${record.nombre} habilitada correctamente`);
         cargarDatos();
       } catch (e) {
@@ -154,7 +153,7 @@ function App() {
   const confirmarDeshabilitar = async () => {
     try {
       await updateDoc(doc(db, "vehiculos", unidadAfectada.id), { estado: motivoSeleccionado });
-      message.warning(`Unidad ${unidadAfectada.nombre} marcada como: ${motivoSeleccionado}`);
+      message.warning(`Unidad ${unidadAfectada.nombre} enviada a: ${motivoSeleccionado}`);
       setMostrarModalMotivo(false);
       cargarDatos();
     } catch (e) {
@@ -302,7 +301,7 @@ function App() {
   };
 
   const obtenerDatosTabla = () => {
-    // Si la pestaña activa es Yarda, devolvemos la colección de unidades (inventario)
+    // CORRECCIÓN: Si estamos en Yarda, mostrar la colección de unidades del inventario
     if (pestañaActiva === 'yarda') {
         return unidades;
     }
@@ -438,14 +437,14 @@ function App() {
                     <Table 
                       dataSource={obtenerDatosTabla()} 
                       columns={[
-                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' },
+                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, // CORREGIDO: dataIndex 'nombre'
                         { 
                           title: 'Estado', 
                           dataIndex: 'estado', 
                           key: 'estado',
-                          render: (estado) => (
-                            <span style={{ color: (estado === 'Disponible' || !estado) ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
-                              {estado || 'Disponible'}
+                          render: (est) => (
+                            <span style={{ color: (est === 'Listo' || !est) ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
+                              {est || 'Listo'}
                             </span>
                           )
                         },
@@ -453,15 +452,15 @@ function App() {
                           title: 'Accion', 
                           render: (_, record) => (
                             <Button 
-                              danger={record.estado === 'Disponible' || !record.estado}
+                              danger={record.estado === 'Listo' || !record.estado}
                               style={{
-                                backgroundColor: (record.estado === 'Disponible' || !record.estado) ? '#8b1a1a' : '#1677ff', 
+                                backgroundColor: (record.estado === 'Listo' || !record.estado) ? '#8b1a1a' : '#1677ff', 
                                 border: 'none',
                                 color: 'white'
                               }}
                               onClick={() => handleAccionDisponibilidad(record)}
                             >
-                              {(record.estado === 'Disponible' || !record.estado) ? 'Deshabilitar' : 'Habilitar'}
+                              {(record.estado === 'Listo' || !record.estado) ? 'Deshabilitar' : 'Habilitar'}
                             </Button>
                           ) 
                         }
@@ -497,7 +496,7 @@ function App() {
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del vehiculo</p>
-                      <Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
+                      <input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
                       <Button type="primary" onClick={() => handleAgregar('vehiculos')}>Agregar</Button>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
@@ -507,7 +506,7 @@ function App() {
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del chofer</p>
-                      <Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
+                      <input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
                       <Button type="primary" onClick={() => handleAgregar('choferes')}>Agregar</Button>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
@@ -517,9 +516,9 @@ function App() {
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del Cliente</p>
-                      <Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} />
+                      <input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} />
                       <p>Correo</p>
-                      <Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
+                      <input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
                       <Button type="primary" onClick={() => handleAgregar('clientes')}>Agregar</Button>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
@@ -676,20 +675,19 @@ function App() {
           {/* --- MODAL DE MOTIVO DE DESHABILITACIÓN --- */}
           <Modal
             title={`Deshabilitar Unidad: ${unidadAfectada?.nombre}`}
-            visible={mostrarModalMotivo}
+            open={mostrarModalMotivo}
             onOk={confirmarDeshabilitar}
             onCancel={() => setMostrarModalMotivo(false)}
-            okText="Confirmar"
-            cancelText="Cancelar"
-            okButtonProps={{ danger: true }}
+            okText="OK"
+            cancelText="Cancel"
+            okButtonProps={{ type: 'primary' }}
           >
-            <div style={{ padding: '20px' }}>
-              <p>Selecciona el motivo de la baja temporal:</p>
+            <div style={{ padding: '20px 0' }}>
+              <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Motivo:</p>
               <Radio.Group onChange={(e) => setMotivoSeleccionado(e.target.value)} value={motivoSeleccionado}>
-                <Radio value="Taller">Taller</Radio>
-                <Radio value="Corralon">Corralón</Radio>
-                <Radio value="Incidente">Incidente</Radio>
-                <Radio value="Baja Temporal">Baja Temporal</Radio>
+                <Radio value="Taller" style={{ display: 'block', marginBottom: '8px' }}>Taller</Radio>
+                <Radio value="Incidente" style={{ display: 'block', marginBottom: '8px' }}>Incidente</Radio>
+                <Radio value="Corralon" style={{ display: 'block', marginBottom: '8px' }}>Corralon</Radio>
               </Radio.Group>
             </div>
           </Modal>
