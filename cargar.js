@@ -23,9 +23,18 @@ async function subirDatos(archivoNombre, coleccionDestino) {
       const valor = row[primeraColumna];
 
       if (valor) {
-        await db.collection(coleccionDestino).add({
+        // --- INICIO DE CAMBIOS PARA DISPONIBILIDAD ---
+        const objetoNuevo = {
           nombre: valor.trim()
-        });
+        };
+
+        // Si estamos cargando vehículos, les asignamos el estado inicial
+        if (coleccionDestino === 'vehiculos') {
+          objetoNuevo.estado = 'Disponible';
+        }
+        // --- FIN DE CAMBIOS ---
+
+        await db.collection(coleccionDestino).add(objetoNuevo);
         console.log(`✅ Subido a ${coleccionDestino}: ${valor}`);
       }
     })
@@ -34,7 +43,7 @@ async function subirDatos(archivoNombre, coleccionDestino) {
     });
 }
 
-// EJECUCIÓN: Asegúrate de que los nombres de los archivos sean EXACTOS
-// ... al final del archivo cargar.js
+// EJECUCIÓN
+// Primero borra la colección "vehiculos" en tu consola de Firebase antes de correr esto
 subirDatos('unidades.csv', 'vehiculos');
 subirDatos('empleados.csv', 'choferes');
