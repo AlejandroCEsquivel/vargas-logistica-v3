@@ -189,7 +189,6 @@ function App() {
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
       if (datosNuevoViaje.correoEnvio) {
-        // CORRECCIÓN: Se usa 'para_correo' para coincidir con el Template de César
         const templateParams = {
           para_correo: datosNuevoViaje.correoEnvio, 
           unidad: datosNuevoViaje.unidad,
@@ -246,11 +245,10 @@ function App() {
     }
 
     try {
-      // 1. INTENTAR GUARDAR EN FIREBASE
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
-        link: info.link || 'No proporcionado', // Link opcional
+        link: info.link || 'No proporcionado',
         fechaEnvio: new Date().toISOString(),
       };
       
@@ -261,8 +259,6 @@ function App() {
         throw new Error("No se pudo guardar en la base de datos");
       }
 
-      // 2. INTENTAR ENVIAR POR EMAILJS
-      // CORRECCIÓN: Se usa 'para_correo' para coincidir con el Template de César
       const templateParams = {
         para_correo: info.correoEnvio,
         unidad: unidadNombre,
@@ -301,7 +297,6 @@ function App() {
   };
 
   const obtenerDatosTabla = () => {
-    // CORRECCIÓN: Si estamos en Yarda, mostrar la colección de unidades del inventario
     if (pestañaActiva === 'yarda') {
         return unidades;
     }
@@ -437,7 +432,7 @@ function App() {
                     <Table 
                       dataSource={obtenerDatosTabla()} 
                       columns={[
-                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, // CORREGIDO: dataIndex 'nombre'
+                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, 
                         { 
                           title: 'Estado', 
                           dataIndex: 'estado', 
@@ -456,7 +451,8 @@ function App() {
                               style={{
                                 backgroundColor: (record.estado === 'Listo' || !record.estado) ? '#8b1a1a' : '#1677ff', 
                                 border: 'none',
-                                color: 'white'
+                                color: 'white',
+                                width: '120px'
                               }}
                               onClick={() => handleAccionDisponibilidad(record)}
                             >
@@ -496,7 +492,7 @@ function App() {
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del vehiculo</p>
-                      <input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
+                      <Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
                       <Button type="primary" onClick={() => handleAgregar('vehiculos')}>Agregar</Button>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
@@ -506,7 +502,7 @@ function App() {
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del chofer</p>
-                      <input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
+                      <Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
                       <Button type="primary" onClick={() => handleAgregar('choferes')}>Agregar</Button>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
@@ -516,9 +512,9 @@ function App() {
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del Cliente</p>
-                      <input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} />
+                      <Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} />
                       <p>Correo</p>
-                      <input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
+                      <Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
                       <Button type="primary" onClick={() => handleAgregar('clientes')}>Agregar</Button>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
@@ -678,16 +674,17 @@ function App() {
             open={mostrarModalMotivo}
             onOk={confirmarDeshabilitar}
             onCancel={() => setMostrarModalMotivo(false)}
-            okText="OK"
-            cancelText="Cancel"
-            okButtonProps={{ type: 'primary' }}
+            okText="Confirmar"
+            cancelText="Cancelar"
+            okButtonProps={{ danger: true }}
           >
             <div style={{ padding: '20px 0' }}>
-              <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Motivo:</p>
+              <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Selecciona el motivo del resguardo:</p>
               <Radio.Group onChange={(e) => setMotivoSeleccionado(e.target.value)} value={motivoSeleccionado}>
                 <Radio value="Taller" style={{ display: 'block', marginBottom: '8px' }}>Taller</Radio>
                 <Radio value="Incidente" style={{ display: 'block', marginBottom: '8px' }}>Incidente</Radio>
                 <Radio value="Corralon" style={{ display: 'block', marginBottom: '8px' }}>Corralon</Radio>
+                <Radio value="Baja Temporal" style={{ display: 'block', marginBottom: '8px' }}>Baja Temporal</Radio>
               </Radio.Group>
             </div>
           </Modal>
