@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-center';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-react';
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd';
 import { db } from './firebase';
@@ -126,6 +127,19 @@ function App() {
     } catch (e) {
       console.error("Error al terminar viaje:", e);
       message.error("No se pudo finalizar el viaje");
+    }
+  };
+
+  // NUEVA FUNCIÓN PARA CAMBIAR DISPONIBILIDAD
+  const handleCambiarDisponibilidad = async (unidadId, estadoActual) => {
+    try {
+      const nuevoEstado = estadoActual === 'Disponible' ? 'Mantenimiento' : 'Disponible';
+      await updateDoc(doc(db, "vehiculos", unidadId), { estado: nuevoEstado });
+      message.success(`Estado de la unidad actualizado a ${nuevoEstado}`);
+      cargarDatos();
+    } catch (e) {
+      console.error(e);
+      message.error("Error al actualizar el estado");
     }
   };
 
@@ -269,6 +283,10 @@ function App() {
   };
 
   const obtenerDatosTabla = () => {
+    // CAMBIO: Si la pestaña es yarda, devolvemos el inventario de unidades
+    if (pestañaActiva === 'yarda') {
+      return unidades;
+    }
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
 
@@ -401,9 +419,33 @@ function App() {
                     <Table 
                       dataSource={obtenerDatosTabla()} 
                       columns={[
-                        { title: 'Unidad', dataIndex: 'unidad', key: 'unidad' },
-                        { title: 'Estado', dataIndex: 'estado', key: 'estado' },
-                        { title: 'Accion', render: () => <Button danger style={{backgroundColor: '#8b1a1a', border: 'none'}}>Deshabilitar</Button> }
+                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, // CAMBIO: dataIndex nombre
+                        { 
+                          title: 'Estado', 
+                          dataIndex: 'estado', 
+                          key: 'estado',
+                          render: (estado) => (
+                            <span style={{ color: estado === 'Disponible' ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
+                              {estado || 'Disponible'}
+                            </span>
+                          )
+                        },
+                        { 
+                          title: 'Accion', 
+                          render: (_, record) => (
+                            <Button 
+                              danger={record.estado === 'Disponible'} 
+                              style={{
+                                backgroundColor: record.estado === 'Disponible' ? '#8b1a1a' : '#1677ff', 
+                                border: 'none',
+                                color: 'white'
+                              }}
+                              onClick={() => handleCambiarDisponibilidad(record.id, record.estado)}
+                            >
+                              {record.estado === 'Disponible' ? 'Deshabilitar' : 'Habilitar'}
+                            </Button>
+                          ) 
+                        }
                       ]}
                       pagination={false}
                       locale={{ emptyText: <Empty description="No hay unidades registradas en yarda" /> }}
