@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-react';
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2 } from 'lucide-react';
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; 
 import { db } from './firebase';
 // SE ACTUALIZARON LAS IMPORTACIONES: Se agregaron query, orderBy y limit
@@ -22,6 +22,17 @@ function App() {
   const [clientes, setClientes] = useState([]);
   const [viajes, setViajes] = useState([]); 
   const [reportes, setReportes] = useState([]); 
+
+  // --- ESTADOS PARA SUGERENCIAS (REGLA DE ORO: INTEGRIDAD) ---
+  const [sugerencias, setSugerencias] = useState({
+    estatus: [],
+    ubicacion: [],
+    velocidad: [],
+    lugar: [],
+    caja: [],
+    origen: [],
+    destino: []
+  });
 
   // --- ESTADOS PARA DISPONIBILIDAD (YARDA) ---
   const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
@@ -50,7 +61,57 @@ function App() {
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // --- FUNCIÓN ACTUALIZADA (OPTIMIZACIÓN PARTE 2) ---
+  // --- FUNCIÓN PARA CARGAR SUGERENCIAS DESDE FIREBASE ---
+  const cargarSugerencias = async () => {
+    try {
+      const snap = await getDocs(collection(db, "sugerencias_menu"));
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      
+      const organizadas = {
+        estatus: docs.filter(d => d.categoria === 'estatus'),
+        ubicacion: docs.filter(d => d.categoria === 'ubicacion'),
+        velocidad: docs.filter(d => d.categoria === 'velocidad'),
+        lugar: docs.filter(d => d.categoria === 'lugar'),
+        caja: docs.filter(d => d.categoria === 'caja'),
+        origen: docs.filter(d => d.categoria === 'origen'),
+        destino: docs.filter(d => d.categoria === 'destino')
+      };
+      setSugerencias(organizadas);
+    } catch (e) {
+      console.error("Error cargando sugerencias:", e);
+    }
+  };
+
+  // --- FUNCIÓN PARA GUARDAR NUEVAS PALABRAS AUTOMÁTICAMENTE ---
+  const guardarSugerenciaAutomatica = async (categoria, valor) => {
+    if (!valor || valor.trim() === '') return;
+    const existe = sugerencias[categoria].some(s => s.valor.toLowerCase() === valor.toLowerCase());
+    if (!existe) {
+      try {
+        await addDoc(collection(db, "sugerencias_menu"), {
+          categoria,
+          valor: valor.trim()
+        });
+        cargarSugerencias();
+      } catch (e) {
+        console.error("Error al guardar sugerencia:", e);
+      }
+    }
+  };
+
+  // --- FUNCIÓN PARA ELIMINAR SUGERENCIAS MAL ESCRITAS ---
+  const eliminarSugerencia = async (e, id) => {
+    e.stopPropagation();
+    try {
+      await deleteDoc(doc(db, "sugerencias_menu", id));
+      cargarSugerencias();
+      message.success("Sugerencia eliminada");
+    } catch (e) {
+      message.error("Error al eliminar");
+    }
+  };
+
+  // --- FUNCIÓN CARGAR DATOS ---
   const cargarDatos = async () => {
     try {
       const snapU = await getDocs(collection(db, "vehiculos"));
@@ -79,6 +140,7 @@ function App() {
       const snapR = await getDocs(qReportes);
       setReportes(snapR.docs.map(d => ({ id: d.id, ...d.data() })));
       
+      cargarSugerencias();
     } catch (e) { 
         console.error("Error al cargar datos:", e); 
     }
@@ -135,7 +197,6 @@ function App() {
     }
   };
 
-  // --- LÓGICA DE DISPONIBILIDAD PARA EL BOTÓN ---
   const handleAccionDisponibilidad = async (record) => {
     if (record.estado === 'Listo' || !record.estado) {
       setUnidadAfectada(record);
@@ -179,6 +240,11 @@ function App() {
     setCargandoViaje(true);
 
     try {
+      // AUTOGUARDADO DE MENÚS INTELIGENTES EN NUEVO VIAJE
+      await guardarSugerenciaAutomatica('caja', datosNuevoViaje.caja);
+      await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
+      await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
+
       const nuevoRegistro = {
         ...datosNuevoViaje,
         fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
@@ -246,6 +312,12 @@ function App() {
     }
 
     try {
+      // AUTOGUARDADO DE MENÚS INTELIGENTES EN BITÁCORA
+      await guardarSugerenciaAutomatica('estatus', info.estatus);
+      await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
+      await guardarSugerenciaAutomatica('velocidad', info.velocidad);
+      await guardarSugerenciaAutomatica('lugar', info.lugar);
+
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
@@ -253,12 +325,7 @@ function App() {
         fechaEnvio: new Date().toISOString(),
       };
       
-      try {
-        await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
-      } catch (dbError) {
-        console.error("Fallo al guardar en Firebase:", dbError);
-        throw new Error("No se pudo guardar en la base de datos");
-      }
+      await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
       const templateParams = {
         para_correo: info.correoEnvio,
@@ -271,17 +338,12 @@ function App() {
         link: info.link || 'Sin enlace'
       };
 
-      try {
-        await emailjs.send(
-          process.env.REACT_APP_EMAILJS_SERVICE_ID,
-          process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
-          templateParams,
-          process.env.REACT_APP_EMAILJS_PUBLIC_KEY
-        );
-      } catch (mailError) {
-        console.error("Fallo al enviar correo con EmailJS:", mailError);
-        throw new Error("El correo no pudo enviarse, revisa tus llaves de EmailJS");
-      }
+      await emailjs.send(
+        process.env.REACT_APP_EMAILJS_SERVICE_ID,
+        process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
+        templateParams,
+        process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+      );
       
       await addDoc(collection(db, "logs_envios"), {
         unidad: unidadNombre,
@@ -293,13 +355,13 @@ function App() {
       message.success(`Reporte de ${unidadNombre} enviado y guardado con éxito`);
     } catch (e) {
       console.error("Error detallado al procesar el envío:", e);
-      message.error(`${e.message}. Revisa la consola para más información.`);
+      message.error("Error al procesar el envío.");
     }
   };
 
   const obtenerDatosTabla = () => {
     if (pestañaActiva === 'yarda') {
-        return unidades; // Aseguramos que devuelva la lista de unidades completa
+        return unidades; 
     }
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
@@ -313,6 +375,32 @@ function App() {
       }
     }));
   };
+
+  // --- COMPONENTE DE SELECT INTELIGENTE (REUTILIZABLE) ---
+  const SelectInteligente = ({ categoria, value, onChange, placeholder }) => (
+    <Select
+      mode="tags"
+      style={{ flex: 1 }}
+      placeholder={placeholder}
+      value={value ? [value] : []}
+      onChange={(vals) => onChange(vals[vals.length - 1] || '')}
+      getPopupContainer={(trigger) => trigger.parentNode}
+    >
+      {sugerencias[categoria].map(s => (
+        <Option key={s.id} value={s.valor}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {s.valor}
+            <Trash2 
+              size={14} 
+              color="#ff4d4f" 
+              onClick={(e) => eliminarSugerencia(e, s.id)} 
+              style={{ cursor: 'pointer' }}
+            />
+          </div>
+        </Option>
+      ))}
+    </Select>
+  );
 
   const columnasReportes = [
     { title: 'Unidad', dataIndex: 'unidad', key: 'unidad' },
@@ -540,7 +628,6 @@ function App() {
                       value={datosNuevoViaje.fecha} 
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, fecha: val})} 
                       style={{ flex: 1 }} 
-                      getPopupContainer={() => document.getElementById('area-modal-nuevo-viaje')}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>No. Carta Porte :</label>
@@ -558,7 +645,6 @@ function App() {
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, hora: val})} 
                       format="HH:mm" 
                       style={{ flex: 1 }} 
-                      getPopupContainer={() => document.getElementById('area-modal-nuevo-viaje')}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Unidad :</label>
@@ -569,7 +655,6 @@ function App() {
                       placeholder="Selecciona unidad" 
                       value={datosNuevoViaje.unidad} 
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, unidad: val})} 
-                      getPopupContainer={() => document.getElementById('area-modal-nuevo-viaje')}
                     >
                       {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
                     </Select>
@@ -582,24 +667,23 @@ function App() {
                       placeholder="Selecciona chofer" 
                       value={datosNuevoViaje.chofer} 
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, chofer: val})} 
-                      getPopupContainer={() => document.getElementById('area-modal-nuevo-viaje')}
                     >
                       {choferes.map(ch => <Option key={ch.id} value={ch.nombre}>{ch.nombre}</Option>)}
                     </Select>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Caja :</label>
-                    <Input value={datosNuevoViaje.caja} onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, caja: e.target.value})} style={{ flex: 1, background: '#262626', border: '1px solid #444' }} />
+                    <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
-                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, cliente: val})} getPopupContainer={() => document.getElementById('area-modal-nuevo-viaje')}>
+                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, cliente: val})} >
                       {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
                     </Select>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Origen :</label>
-                    <Input value={datosNuevoViaje.origen} onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, origen: e.target.value})} style={{ flex: 1, background: '#262626', border: '1px solid #444' }} />
+                    <SelectInteligente categoria="origen" value={datosNuevoViaje.origen} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, origen: val})} placeholder="Escribe o selecciona origen" />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Destino :</label>
-                    <Input value={datosNuevoViaje.destino} onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, destino: e.target.value})} style={{ flex: 1, background: '#262626', border: '1px solid #444' }} />
+                    <SelectInteligente categoria="destino" value={datosNuevoViaje.destino} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, destino: val})} placeholder="Escribe o selecciona destino" />
                   </div>
 
                   <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px', border: '1px solid #3b82f6' }}>
@@ -634,7 +718,6 @@ function App() {
                     onChange={(values) => setUnidadesSeleccionadasBitacora(values)} 
                     allowClear 
                     showSearch
-                    getPopupContainer={() => document.getElementById('area-modal-bitacora')}
                   >
                     {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
                   </Select>
@@ -647,15 +730,23 @@ function App() {
                     <div key={nombreUnidad} style={{ background: '#1a1a1a', borderRadius: '4px', border: '1px solid #333' }}>
                       <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6' }}>{nombreUnidad}</div>
                       <div style={{ padding: '25px', background: '#164e63', margin: '15px', borderRadius: '4px' }}>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Estatus :</label><Input value={datosBitacora[nombreUnidad]?.estatus || ''} onChange={e => handleInputBitacora(nombreUnidad, 'estatus', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Ubicacion :</label><Input value={datosBitacora[nombreUnidad]?.ubicacion || ''} onChange={e => handleInputBitacora(nombreUnidad, 'ubicacion', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Velocidad :</label><Input value={datosBitacora[nombreUnidad]?.velocidad || ''} onChange={e => handleInputBitacora(nombreUnidad, 'velocidad', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
+                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Estatus :</label>
+                          <SelectInteligente categoria="estatus" value={datosBitacora[nombreUnidad]?.estatus} onChange={val => handleInputBitacora(nombreUnidad, 'estatus', val)} placeholder="Estatus" />
+                        </div>
+                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Ubicacion :</label>
+                          <SelectInteligente categoria="ubicacion" value={datosBitacora[nombreUnidad]?.ubicacion} onChange={val => handleInputBitacora(nombreUnidad, 'ubicacion', val)} placeholder="Ubicación" />
+                        </div>
+                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Velocidad :</label>
+                          <SelectInteligente categoria="velocidad" value={datosBitacora[nombreUnidad]?.velocidad} onChange={val => handleInputBitacora(nombreUnidad, 'velocidad', val)} placeholder="Velocidad" />
+                        </div>
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Cliente :</label>
-                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} onChange={val => handleInputBitacora(nombreUnidad, 'cliente', val)} getPopupContainer={() => document.getElementById('area-modal-bitacora')}>
+                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} onChange={val => handleInputBitacora(nombreUnidad, 'cliente', val)} >
                               {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
                           </Select>
                         </div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Lugar :</label><Input value={datosBitacora[nombreUnidad]?.lugar || ''} onChange={e => handleInputBitacora(nombreUnidad, 'lugar', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
+                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Lugar :</label>
+                          <SelectInteligente categoria="lugar" value={datosBitacora[nombreUnidad]?.lugar} onChange={val => handleInputBitacora(nombreUnidad, 'lugar', val)} placeholder="Lugar" />
+                        </div>
                         <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Link :</label><Input value={datosBitacora[nombreUnidad]?.link || ''} onChange={e => handleInputBitacora(nombreUnidad, 'link', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
                         <div style={{ marginBottom: '15px', padding: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
                             <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#ddd' }}>Enviar reporte a:</label>
@@ -670,7 +761,6 @@ function App() {
             </div>
           )}
 
-          {/* --- MODAL DE MOTIVO DE DESHABILITACIÓN --- */}
           <Modal
             title={`Deshabilitar Unidad: ${unidadAfectada?.nombre}`}
             open={mostrarModalMotivo}
