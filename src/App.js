@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-center';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd';
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; // Se agregaron Modal y Radio
 import { db } from './firebase';
 // SE ACTUALIZARON LAS IMPORTACIONES: Se agregaron query, orderBy y limit
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
@@ -23,6 +22,11 @@ function App() {
   const [clientes, setClientes] = useState([]);
   const [viajes, setViajes] = useState([]); 
   const [reportes, setReportes] = useState([]); 
+
+  // --- ESTADOS PARA DISPONIBILIDAD (YARDA) ---
+  const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
+  const [unidadAfectada, setUnidadAfectada] = useState(null);
+  const [motivoSeleccionado, setMotivoSeleccionado] = useState('Taller');
 
   const [datosNuevoViaje, setDatosNuevoViaje] = useState({
     fecha: null,
@@ -86,7 +90,7 @@ function App() {
     
     if (coleccion === 'vehiculos') {
       if (!nuevoVehiculo) return;
-      objetoNuevo = { nombre: nuevoVehiculo };
+      objetoNuevo = { nombre: nuevoVehiculo, estado: 'Disponible' };
       await addDoc(collection(db, "vehiculos"), objetoNuevo);
       setNuevoVehiculo('');
     } 
@@ -130,16 +134,31 @@ function App() {
     }
   };
 
-  // NUEVA FUNCIÓN PARA CAMBIAR DISPONIBILIDAD
-  const handleCambiarDisponibilidad = async (unidadId, estadoActual) => {
+  // --- LÓGICA DE DISPONIBILIDAD ---
+  const handleAccionDisponibilidad = async (record) => {
+    if (record.estado === 'Disponible' || !record.estado) {
+      setUnidadAfectada(record);
+      setMostrarModalMotivo(true);
+    } else {
+      // Habilitar de nuevo
+      try {
+        await updateDoc(doc(db, "vehiculos", record.id), { estado: 'Disponible' });
+        message.success(`Unidad ${record.nombre} habilitada correctamente`);
+        cargarDatos();
+      } catch (e) {
+        message.error("Error al habilitar unidad");
+      }
+    }
+  };
+
+  const confirmarDeshabilitar = async () => {
     try {
-      const nuevoEstado = estadoActual === 'Disponible' ? 'Mantenimiento' : 'Disponible';
-      await updateDoc(doc(db, "vehiculos", unidadId), { estado: nuevoEstado });
-      message.success(`Estado de la unidad actualizado a ${nuevoEstado}`);
+      await updateDoc(doc(db, "vehiculos", unidadAfectada.id), { estado: motivoSeleccionado });
+      message.warning(`Unidad ${unidadAfectada.nombre} marcada como: ${motivoSeleccionado}`);
+      setMostrarModalMotivo(false);
       cargarDatos();
     } catch (e) {
-      console.error(e);
-      message.error("Error al actualizar el estado");
+      message.error("Error al actualizar estado");
     }
   };
 
@@ -283,9 +302,9 @@ function App() {
   };
 
   const obtenerDatosTabla = () => {
-    // CAMBIO: Si la pestaña es yarda, devolvemos el inventario de unidades
+    // Si la pestaña activa es Yarda, devolvemos la colección de unidades (inventario)
     if (pestañaActiva === 'yarda') {
-      return unidades;
+        return unidades;
     }
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
@@ -419,13 +438,13 @@ function App() {
                     <Table 
                       dataSource={obtenerDatosTabla()} 
                       columns={[
-                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, // CAMBIO: dataIndex nombre
+                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' },
                         { 
                           title: 'Estado', 
                           dataIndex: 'estado', 
                           key: 'estado',
                           render: (estado) => (
-                            <span style={{ color: estado === 'Disponible' ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
+                            <span style={{ color: (estado === 'Disponible' || !estado) ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
                               {estado || 'Disponible'}
                             </span>
                           )
@@ -434,15 +453,15 @@ function App() {
                           title: 'Accion', 
                           render: (_, record) => (
                             <Button 
-                              danger={record.estado === 'Disponible'} 
+                              danger={record.estado === 'Disponible' || !record.estado}
                               style={{
-                                backgroundColor: record.estado === 'Disponible' ? '#8b1a1a' : '#1677ff', 
+                                backgroundColor: (record.estado === 'Disponible' || !record.estado) ? '#8b1a1a' : '#1677ff', 
                                 border: 'none',
                                 color: 'white'
                               }}
-                              onClick={() => handleCambiarDisponibilidad(record.id, record.estado)}
+                              onClick={() => handleAccionDisponibilidad(record)}
                             >
-                              {record.estado === 'Disponible' ? 'Deshabilitar' : 'Habilitar'}
+                              {(record.estado === 'Disponible' || !record.estado) ? 'Deshabilitar' : 'Habilitar'}
                             </Button>
                           ) 
                         }
@@ -653,6 +672,27 @@ function App() {
               )}
             </div>
           )}
+
+          {/* --- MODAL DE MOTIVO DE DESHABILITACIÓN --- */}
+          <Modal
+            title={`Deshabilitar Unidad: ${unidadAfectada?.nombre}`}
+            visible={mostrarModalMotivo}
+            onOk={confirmarDeshabilitar}
+            onCancel={() => setMostrarModalMotivo(false)}
+            okText="Confirmar"
+            cancelText="Cancelar"
+            okButtonProps={{ danger: true }}
+          >
+            <div style={{ padding: '20px' }}>
+              <p>Selecciona el motivo de la baja temporal:</p>
+              <Radio.Group onChange={(e) => setMotivoSeleccionado(e.target.value)} value={motivoSeleccionado}>
+                <Radio value="Taller">Taller</Radio>
+                <Radio value="Corralon">Corralón</Radio>
+                <Radio value="Incidente">Incidente</Radio>
+                <Radio value="Baja Temporal">Baja Temporal</Radio>
+              </Radio.Group>
+            </div>
+          </Modal>
 
         </div>
       </div>
