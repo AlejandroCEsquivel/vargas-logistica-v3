@@ -54,7 +54,8 @@ function App() {
   const cargarDatos = async () => {
     try {
       const snapU = await getDocs(collection(db, "vehiculos"));
-      setUnidades(snapU.docs.map(d => ({ id: d.id, ...d.data() })));
+      const listaUnidades = snapU.docs.map(d => ({ id: d.id, ...d.data() }));
+      setUnidades(listaUnidades);
       
       const snapCh = await getDocs(collection(db, "choferes"));
       setChoferes(snapCh.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -298,7 +299,7 @@ function App() {
 
   const obtenerDatosTabla = () => {
     if (pestañaActiva === 'yarda') {
-        return unidades;
+        return unidades; // Aseguramos que devuelva la lista de unidades completa
     }
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
@@ -431,6 +432,7 @@ function App() {
                     <h2 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '40px' }}>En Yarda</h2>
                     <Table 
                       dataSource={obtenerDatosTabla()} 
+                      rowKey="id"
                       columns={[
                         { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, 
                         { 
@@ -677,6 +679,7 @@ function App() {
             okText="Confirmar"
             cancelText="Cancelar"
             okButtonProps={{ danger: true }}
+            getPopupContainer={() => document.body}
           >
             <div style={{ padding: '20px 0' }}>
               <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Selecciona el motivo del resguardo:</p>
