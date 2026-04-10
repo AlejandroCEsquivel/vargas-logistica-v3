@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2 } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; 
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import emailjs from '@emailjs/browser'; 
@@ -21,6 +21,9 @@ function App() {
   const [clientes, setClientes] = useState([]);
   const [viajes, setViajes] = useState([]); 
   const [reportes, setReportes] = useState([]); 
+
+  // Estado para el Banner de Bitácora
+  const [bannerBitacora, setBannerBitacora] = useState({ visible: false, mensaje: '', tipo: 'success' });
 
   const [sugerencias, setSugerencias] = useState({
     estatus: [],
@@ -335,13 +338,14 @@ function App() {
       });
 
       message.success(`Reporte de ${unidadNombre} enviado y guardado con éxito`);
+      setBannerBitacora({ visible: true, mensaje: `Envío exitoso: El reporte de la unidad ${unidadNombre} fue enviado al cliente.`, tipo: 'success' });
     } catch (e) {
       console.error("Error detallado al procesar el envío:", e);
       message.error("Error al procesar el envío.");
+      setBannerBitacora({ visible: true, mensaje: `Error en el envío (${unidadNombre}): ${e.message || 'No se pudo completar el proceso.'}`, tipo: 'error' });
     }
   };
 
-  // NUEVA FUNCIÓN: ENVÍO MASIVO A CORREOS INTERNOS
   const handleEnviarBitacoraMasiva = async () => {
     if (unidadesSeleccionadasBitacora.length === 0) {
       return message.warning("No hay unidades seleccionadas para enviar.");
@@ -367,7 +371,6 @@ function App() {
       for (const nombreUnidad of unidadesSeleccionadasBitacora) {
         const info = datosBitacora[nombreUnidad] || {};
         
-        // Guardamos en base de datos primero
         await addDoc(collection(db, "reportes_bitacora"), {
           unidad: nombreUnidad,
           ...info,
@@ -375,7 +378,6 @@ function App() {
           tipoEnvio: "Masivo Interno"
         });
 
-        // Enviamos correo masivo para esta unidad
         const templateParams = {
           para_correo: correosInternos,
           unidad: nombreUnidad,
@@ -395,9 +397,11 @@ function App() {
         );
       }
       message.success({ content: "Todos los reportes internos fueron enviados", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: "Envío Masivo Exitoso: Todos los reportes han sido distribuidos a los correos internos.", tipo: 'success' });
     } catch (error) {
       console.error("Error en envío masivo:", error);
       message.error({ content: "Error al realizar el envío masivo", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: `Error en Envío Masivo: ${error.message || 'Error de conexión o configuración.'}`, tipo: 'error' });
     }
   };
 
@@ -776,7 +780,7 @@ function App() {
 
           {mostrarModalBitacora && (
             <div id="area-modal-bitacora" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, padding: '40px', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flex: 1 }}>
                   <h2 style={{ margin: 0 }}>Capturar Bitacora</h2>
                   <Select 
@@ -792,8 +796,20 @@ function App() {
                     {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
                   </Select>
                 </div>
-                <X onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); }} style={{ cursor: 'pointer' }} />
+                <X onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' }); }} style={{ cursor: 'pointer' }} />
               </div>
+
+              {/* BANNER DE ESTADO */}
+              {bannerBitacora.visible && (
+                <Alert
+                  message={bannerBitacora.mensaje}
+                  type={bannerBitacora.tipo}
+                  showIcon
+                  closable
+                  onClose={() => setBannerBitacora({ ...bannerBitacora, visible: false })}
+                  style={{ marginBottom: '20px', borderRadius: '4px' }}
+                />
+              )}
 
               {unidadesSeleccionadasBitacora.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 450px))', gap: '25px', marginBottom: '80px' }}>
@@ -830,9 +846,8 @@ function App() {
                 </div>
               )}
 
-              {/* FOOTER DEL MODAL CON EL BOTÓN ENVIAR MASIVO */}
               <div style={{ position: 'sticky', bottom: '-40px', left: '-40px', right: '-40px', background: '#000', padding: '20px 40px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '15px', zIndex: 10 }}>
-                <Button onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); }} style={{ background: '#262626', color: '#fff', border: 'none' }}>Cancelar</Button>
+                <Button onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' }); }} style={{ background: '#262626', color: '#fff', border: 'none' }}>Cancelar</Button>
                 <Button type="primary" onClick={handleEnviarBitacoraMasiva} style={{ height: '32px', padding: '0 25px' }}>Enviar</Button>
               </div>
             </div>
