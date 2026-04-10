@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2 } from 'lucide-react';
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; 
 import { db } from './firebase';
-// SE ACTUALIZARON LAS IMPORTACIONES: Se agregó onSnapshot para el tiempo real
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import emailjs from '@emailjs/browser'; 
 import 'antd/dist/reset.css';
@@ -23,7 +22,6 @@ function App() {
   const [viajes, setViajes] = useState([]); 
   const [reportes, setReportes] = useState([]); 
 
-  // --- ESTADOS PARA SUGERENCIAS (REGLA DE ORO: INTEGRIDAD) ---
   const [sugerencias, setSugerencias] = useState({
     estatus: [],
     ubicacion: [],
@@ -34,7 +32,6 @@ function App() {
     destino: []
   });
 
-  // --- ESTADOS PARA DISPONIBILIDAD (YARDA) ---
   const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
   const [unidadAfectada, setUnidadAfectada] = useState(null);
   const [motivoSeleccionado, setMotivoSeleccionado] = useState('Taller');
@@ -55,13 +52,11 @@ function App() {
   const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
   const [datosBitacora, setDatosBitacora] = useState({}); 
 
-  // --- ESTADOS INDEPENDIENTES PARA CONFIGURACIÓN ---
   const [nuevoVehiculo, setNuevoVehiculo] = useState('');
   const [nuevoChofer, setNuevoChofer] = useState('');
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // --- FUNCIÓN PARA CARGAR SUGERENCIAS DESDE FIREBASE ---
   const cargarSugerencias = async () => {
     try {
       const snap = await getDocs(collection(db, "sugerencias_menu"));
@@ -109,7 +104,6 @@ function App() {
     }
   };
 
-  // --- FUNCIÓN CARGAR DATOS EN TIEMPO REAL ---
   useEffect(() => {
     cargarSugerencias();
 
@@ -135,7 +129,6 @@ function App() {
       setReportes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => console.error("Error reportes en tiempo real:", error));
 
-    // Limpieza de los listeners cuando el componente se desmonta
     return () => {
       unsubVehiculos();
       unsubChoferes();
@@ -235,10 +228,12 @@ function App() {
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
       await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
 
+      // PASO 3: SE AGREGA EL TIMESTAMP INVISIBLE PARA FUTUROS FILTROS DE FECHAS
       const nuevoRegistro = {
         ...datosNuevoViaje,
         fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
         hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
+        timestampFiltro: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.valueOf() : new Date().getTime(),
         estatus: 'viajes',
         fechaCreacion: new Date().toISOString()
       };
