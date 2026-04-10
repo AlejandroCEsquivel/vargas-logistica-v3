@@ -255,7 +255,10 @@ function App() {
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
+      // BLOQUE DE ENVÍO DE CORREO MEJORADO
       if (datosNuevoViaje.correoEnvio) {
+        console.log("Intentando enviar correo a:", datosNuevoViaje.correoEnvio);
+        
         const tablaNuevoViajeHTML = `
           <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
             <p style="text-align: center; font-weight: bold; background-color: #fff2cc; padding: 5px; margin-bottom: 0; width: fit-content; margin-left: auto; margin-right: auto;">Nuevo viaje foraneo</p>
@@ -308,22 +311,28 @@ function App() {
           contenido_tabla: tablaNuevoViajeHTML 
         };
 
-        await emailjs.send(
-          process.env.REACT_APP_EMAILJS_SERVICE_ID, 
-          process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID, 
-          templateParams, 
-          process.env.REACT_APP_EMAILJS_PUBLIC_KEY
-        );
-        
-        await addDoc(collection(db, "logs_envios"), {
-          viajeId: docRef.id,
-          destinatario: datosNuevoViaje.correoEnvio,
-          unidad: datosNuevoViaje.unidad,
-          fechaEnvio: new Date().toISOString(),
-          tipo: 'Creación de Viaje (Formato Tabla)'
-        });
+        try {
+          const serviceId = process.env.REACT_APP_EMAILJS_SERVICE_ID;
+          const templateId = process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID;
+          const publicKey = process.env.REACT_APP_EMAILJS_PUBLIC_KEY;
 
-        message.info("Correo de notificación enviado y registrado");
+          console.log("Usando Template ID:", templateId);
+
+          await emailjs.send(serviceId, templateId, templateParams, publicKey);
+          
+          await addDoc(collection(db, "logs_envios"), {
+            viajeId: docRef.id,
+            destinatario: datosNuevoViaje.correoEnvio,
+            unidad: datosNuevoViaje.unidad,
+            fechaEnvio: new Date().toISOString(),
+            tipo: 'Creación de Viaje (Formato Tabla)'
+          });
+
+          message.info("Correo de notificación enviado y registrado");
+        } catch (mailError) {
+          console.error("Error crítico al enviar correo EmailJS:", mailError);
+          message.error("Viaje guardado, pero falló el envío del correo. Revisa la consola.");
+        }
       }
 
       message.success("Viaje creado con éxito");
@@ -336,7 +345,7 @@ function App() {
       });
       
     } catch (e) {
-      console.error("Error general:", e);
+      console.error("Error general en handleCrearViaje:", e);
       message.error("Hubo un problema al procesar el viaje");
     } finally {
       setCargandoViaje(false);
