@@ -209,6 +209,7 @@ function App() {
     }
   };
 
+  // FUNCIÓN ACTUALIZADA: CREACIÓN DE VIAJE CON CORREO EN FORMATO TABLA
   const handleCrearViaje = async () => {
     if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer || !datosNuevoViaje.cp) {
       return message.warning("Por favor completa los campos obligatorios resaltados");
@@ -242,21 +243,63 @@ function App() {
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
       if (datosNuevoViaje.correoEnvio) {
+        // 1. CONSTRUIR TABLA HTML PARA NUEVO VIAJE (Formato Vertical)
+        const tablaNuevoViajeHTML = `
+          <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
+            <p style="text-align: center; font-weight: bold; background-color: #fff2cc; padding: 5px; margin-bottom: 0; width: fit-content; margin-left: auto; margin-right: auto;">Nuevo viaje foraneo</p>
+            <table style="width: 100%; max-width: 800px; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-top: 5px;">
+              <tbody>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px; width: 30%;">Fecha y hora de salida:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.fecha} ${nuevoRegistro.hora}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Tractor:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.unidad || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Remolque:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.caja || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Chofer:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.chofer || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Cliente:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cliente || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Origen:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.origen || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Destino:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.destino || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;"># Carta Porte:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cp || ''}</td>
+                </tr>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
+                  <td style="border: 1px solid #000; padding: 5px;">Pendiente</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `;
+
+        // 2. ENVIAR USANDO LA VARIABLE DE CONTENIDO HTML
         const templateParams = {
-          para_correo: datosNuevoViaje.correoEnvio, 
-          unidad: datosNuevoViaje.unidad,
-          cp: datosNuevoViaje.cp,
-          chofer: datosNuevoViaje.chofer,
-          origen: datosNuevoViaje.origen,
-          destino: datosNuevoViaje.destino,
-          cliente: datosNuevoViaje.cliente,
-          fecha_salida: nuevoRegistro.fecha,
-          hora_salida: nuevoRegistro.hora
+          para_correo: datosNuevoViaje.correoEnvio,
+          subject: `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
+          contenido_tabla: tablaNuevoViajeHTML 
         };
 
         await emailjs.send(
           process.env.REACT_APP_EMAILJS_SERVICE_ID, 
-          process.env.REACT_APP_EMAILJS_TEMPLATE_ID, 
+          process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID, 
           templateParams, 
           process.env.REACT_APP_EMAILJS_PUBLIC_KEY
         );
@@ -266,7 +309,7 @@ function App() {
           destinatario: datosNuevoViaje.correoEnvio,
           unidad: datosNuevoViaje.unidad,
           fechaEnvio: new Date().toISOString(),
-          tipo: 'Creación de Viaje'
+          tipo: 'Creación de Viaje (Formato Tabla)'
         });
 
         message.info("Correo de notificación enviado y registrado");
@@ -345,7 +388,6 @@ function App() {
     }
   };
 
-  // FUNCIÓN ACTUALIZADA: ENVÍO CONSOLIDADO (UN SOLO CORREO CON TABLA PROFESIONAL)
   const handleEnviarBitacoraMasiva = async () => {
     if (unidadesSeleccionadasBitacora.length === 0) {
       return message.warning("No hay unidades seleccionadas para enviar.");
@@ -365,35 +407,31 @@ function App() {
       "silvia@vargasinterlogistics.com"
     ].join(", ");
 
-    message.loading({ content: "Generando reporte consolidado...", key: "envioMasivo" });
+    message.loading({ content: "Generando reporte consolidado completo...", key: "envioMasivo" });
 
     try {
-      // 1. CONSTRUIR FILAS DE LA TABLA HTML (Idéntica a la imagen image_50b4c3.png)
-      let filasHTML = "";
+      let filasViajesHTML = "";
       
       for (const nombreUnidad of unidadesSeleccionadasBitacora) {
         const info = datosBitacora[nombreUnidad] || {};
-        
-        // Buscamos datos del viaje activo para Chofer y Remolque (Caja)
         const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && v.estatus === 'viajes');
-        const chofer = viajeActivo?.chofer || "N/A";
-        const remolque = viajeActivo?.caja || "N/A";
+        const chofer = viajeActivo?.chofer || "";
+        const remolque = viajeActivo?.caja || "";
 
-        filasHTML += `
+        filasViajesHTML += `
           <tr>
             <td style="border: 1px solid #000; padding: 5px; text-align: left;">${nombreUnidad}</td>
             <td style="border: 1px solid #000; padding: 5px; text-align: left;">${chofer}</td>
             <td style="border: 1px solid #000; padding: 5px; text-align: left;">${remolque}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.estatus || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.ubicacion || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.velocidad || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.cliente || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.lugar || 'N/A'}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.link || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.estatus || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.ubicacion || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.velocidad || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.cliente || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.lugar || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.link || ''}</td>
           </tr>
         `;
 
-        // Registro individual en Firebase
         await addDoc(collection(db, "reportes_bitacora"), {
           unidad: nombreUnidad,
           ...info,
@@ -402,33 +440,59 @@ function App() {
         });
       }
 
-      // 2. CREAR TABLA CON ESTILO INSTITUCIONAL
+      const unidadesActivasNombres = viajes.filter(v => v.estatus === 'viajes').map(v => v.unidad);
+      const unidadesEnYarda = unidades.filter(u => !unidadesActivasNombres.includes(u.nombre));
+      
+      let filasYardaHTML = "";
+      unidadesEnYarda.forEach(u => {
+        const estatusMostrar = (u.estado && u.estado !== 'Listo') ? u.estado : 'Sin viaje';
+        filasYardaHTML += `
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${u.nombre}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${estatusMostrar}</td>
+          </tr>
+        `;
+      });
+
       const tablaConsolidadaHTML = `
-        <div style="font-family: Arial, sans-serif;">
-          <h3 style="color: #333;">Unidades en viaje o espera de carga:</h3>
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+        <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
+          <p style="margin-bottom: 15px;">Unidades en viaje o espera de carga:</p>
+          
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-bottom: 30px;">
             <thead>
-              <tr style="background-color: #f2f2f2;">
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Vehículo</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Chofer</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Remolque</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Estatus</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Ubicación</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Velocidad / Motivo detenido</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Cliente</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Lugar</th>
-                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Link</th>
+              <tr>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Vehiculo</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Chofer</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Remolque</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Estatus</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Ubicacion</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Velocidad / Motivo detenido</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Cliente</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Lugar</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Link</th>
               </tr>
             </thead>
             <tbody>
-              ${filasHTML}
+              ${filasViajesHTML}
             </tbody>
           </table>
-          <p style="font-size: 10px; color: #666; margin-top: 15px;">Reporte generado automáticamente por Bitácora Foránea - Transporte Vargas</p>
+
+          <p style="margin-bottom: 15px;">Unidades en yarda:</p>
+          
+          <table style="width: 250px; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
+            <thead>
+              <tr>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Vehiculo</th>
+                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Estatus</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filasYardaHTML}
+            </tbody>
+          </table>
         </div>
       `;
 
-      // 3. ENVÍO ÚNICO POR EMAILJS
       const templateParams = {
         para_correo: correosInternos,
         subject: `REPORTE DE ESTATUS CONSOLIDADO - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
@@ -443,7 +507,7 @@ function App() {
       );
 
       message.success({ content: "Reporte consolidado enviado con éxito", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso: Se envió una sola tabla con todas las unidades activas al equipo de Tráfico.", tipo: 'success' });
+      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso: Se envió el reporte completo (Viajes y Yarda) al equipo de Tráfico.", tipo: 'success' });
     } catch (error) {
       console.error("Error en envío consolidado:", error);
       message.error({ content: "Error al realizar el envío consolidado", key: "envioMasivo" });
