@@ -228,7 +228,6 @@ function App() {
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
       await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
 
-      // PASO 3: SE AGREGA EL TIMESTAMP INVISIBLE PARA FUTUROS FILTROS DE FECHAS
       const nuevoRegistro = {
         ...datosNuevoViaje,
         fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
@@ -661,6 +660,7 @@ function App() {
                       placeholder="Selecciona unidad" 
                       value={datosNuevoViaje.unidad} 
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, unidad: val})} 
+                      getPopupContainer={(trigger) => trigger.parentNode}
                     >
                       {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
                     </Select>
@@ -673,6 +673,7 @@ function App() {
                       placeholder="Selecciona chofer" 
                       value={datosNuevoViaje.chofer} 
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, chofer: val})} 
+                      getPopupContainer={(trigger) => trigger.parentNode}
                     >
                       {choferes.map(ch => <Option key={ch.id} value={ch.nombre}>{ch.nombre}</Option>)}
                     </Select>
@@ -681,7 +682,7 @@ function App() {
                     <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
-                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, cliente: val})} >
+                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, cliente: val})} getPopupContainer={(trigger) => trigger.parentNode} >
                       {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
                     </Select>
                   </div>
@@ -724,6 +725,7 @@ function App() {
                     onChange={(values) => setUnidadesSeleccionadasBitacora(values)} 
                     allowClear 
                     showSearch
+                    getPopupContainer={(trigger) => trigger.parentNode}
                   >
                     {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
                   </Select>
@@ -746,7 +748,7 @@ function App() {
                           <SelectInteligente categoria="velocidad" value={datosBitacora[nombreUnidad]?.velocidad} onChange={val => handleInputBitacora(nombreUnidad, 'velocidad', val)} placeholder="Velocidad" />
                         </div>
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Cliente :</label>
-                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} onChange={val => handleInputBitacora(nombreUnidad, 'cliente', val)} >
+                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} onChange={val => handleInputBitacora(nombreUnidad, 'cliente', val)} getPopupContainer={(trigger) => trigger.parentNode}>
                               {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
                           </Select>
                         </div>
