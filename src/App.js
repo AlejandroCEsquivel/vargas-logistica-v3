@@ -22,7 +22,6 @@ function App() {
   const [viajes, setViajes] = useState([]); 
   const [reportes, setReportes] = useState([]); 
 
-  // Estado para el Banner de Bitácora
   const [bannerBitacora, setBannerBitacora] = useState({ visible: false, mensaje: '', tipo: 'success' });
 
   const [sugerencias, setSugerencias] = useState({
@@ -422,6 +421,16 @@ function App() {
     }));
   };
 
+  // NUEVA FUNCIÓN PARA ABRIR BITÁCORA CON UNIDADES PRE-CARGADAS
+  const handleAbrirBitacoraInteligente = () => {
+    const unidadesEnViaje = viajes
+      .filter(v => v.estatus === 'viajes')
+      .map(v => v.unidad);
+    
+    setUnidadesSeleccionadasBitacora(unidadesEnViaje);
+    setMostrarModalBitacora(true);
+  };
+
   const SelectInteligente = ({ categoria, value, onChange, placeholder }) => (
     <Select
       mode="tags"
@@ -492,7 +501,7 @@ function App() {
                     : 'Registros encontrados'}
                 </p>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '25px' }}>
-                  <Button type="primary" onClick={() => setMostrarModalBitacora(true)} style={{ backgroundColor: '#007bff', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Capturar bitacora</Button>
+                  <Button type="primary" onClick={handleAbrirBitacoraInteligente} style={{ backgroundColor: '#007bff', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Capturar bitacora</Button>
                   <Button type="primary" danger onClick={() => setMostrarModalNuevoViaje(true)} style={{ backgroundColor: '#dc3545', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Nuevo viaje</Button>
                 </div>
               </div>
@@ -799,7 +808,6 @@ function App() {
                 <X onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' }); }} style={{ cursor: 'pointer' }} />
               </div>
 
-              {/* BANNER DE ESTADO */}
               {bannerBitacora.visible && (
                 <Alert
                   message={bannerBitacora.mensaje}
