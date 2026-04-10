@@ -633,6 +633,7 @@ function App() {
                       value={datosNuevoViaje.fecha} 
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, fecha: val})} 
                       style={{ flex: 1 }} 
+                      getPopupContainer={(trigger) => trigger.parentNode}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>No. Carta Porte :</label>
@@ -650,6 +651,7 @@ function App() {
                       onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, hora: val})} 
                       format="HH:mm" 
                       style={{ flex: 1 }} 
+                      getPopupContainer={(trigger) => trigger.parentNode}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Unidad :</label>
