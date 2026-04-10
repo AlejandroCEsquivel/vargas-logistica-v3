@@ -395,6 +395,7 @@ function App() {
       const templateParams = {
         para_correo: info.correoEnvio,
         unidad: unidadNombre,
+        subject: `ESTATUS UNIDAD ${unidadNombre} - ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
         estatus: info.estatus || 'N/A',
         ubicacion: info.ubicacion || 'N/A',
         velocidad: info.velocidad || 'N/A',
@@ -453,7 +454,6 @@ function App() {
       for (const nombreUnidad of unidadesSeleccionadasBitacora) {
         const info = datosBitacora[nombreUnidad] || {};
         
-        // --- LÓGICA DE APRENDIZAJE / AUTOGUARDADO AGREGADA AQUÍ ---
         await guardarSugerenciaAutomatica('estatus', info.estatus);
         await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
         await guardarSugerenciaAutomatica('velocidad', info.velocidad);
@@ -501,7 +501,7 @@ function App() {
 
       const tablaConsolidadaHTML = `
         <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
-          <p style="margin-bottom: 15px;">Unidades en viaje o espera de carga:</p>
+          <p style="margin-bottom: 15px;">Unidades foraneas de viaje o espera de carga:</p>
           
           <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-bottom: 30px;">
             <thead>
@@ -540,7 +540,7 @@ function App() {
 
       const templateParams = {
         para_correo: correosInternos,
-        subject: `REPORTE DE ESTATUS CONSOLIDADO - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        subject: `ESTATUS UNIDADES FORANEAS - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
         contenido_tabla: tablaConsolidadaHTML 
       };
 
