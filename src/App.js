@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2 } from 'lucide-react';
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio } from 'antd'; 
 import { db } from './firebase';
-// SE ACTUALIZARON LAS IMPORTACIONES: Se agregaron query, orderBy y limit
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit } from 'firebase/firestore';
+// SE ACTUALIZARON LAS IMPORTACIONES: Se agregó onSnapshot para el tiempo real
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import emailjs from '@emailjs/browser'; 
 import 'antd/dist/reset.css';
 
@@ -82,7 +82,6 @@ function App() {
     }
   };
 
-  // --- FUNCIÓN PARA GUARDAR NUEVAS PALABRAS AUTOMÁTICAMENTE ---
   const guardarSugerenciaAutomatica = async (categoria, valor) => {
     if (!valor || valor.trim() === '') return;
     const existe = sugerencias[categoria].some(s => s.valor.toLowerCase() === valor.toLowerCase());
@@ -99,7 +98,6 @@ function App() {
     }
   };
 
-  // --- FUNCIÓN PARA ELIMINAR SUGERENCIAS MAL ESCRITAS ---
   const eliminarSugerencia = async (e, id) => {
     e.stopPropagation();
     try {
@@ -111,42 +109,41 @@ function App() {
     }
   };
 
-  // --- FUNCIÓN CARGAR DATOS ---
-  const cargarDatos = async () => {
-    try {
-      const snapU = await getDocs(collection(db, "vehiculos"));
-      const listaUnidades = snapU.docs.map(d => ({ id: d.id, ...d.data() }));
-      setUnidades(listaUnidades);
-      
-      const snapCh = await getDocs(collection(db, "choferes"));
-      setChoferes(snapCh.docs.map(d => ({ id: d.id, ...d.data() })));
-      
-      const snapCl = await getDocs(collection(db, "clientes"));
-      setClientes(snapCl.docs.map(d => ({ id: d.id, ...d.data() })));
+  // --- FUNCIÓN CARGAR DATOS EN TIEMPO REAL ---
+  useEffect(() => {
+    cargarSugerencias();
 
-      const qViajes = query(
-        collection(db, "viajes"),
-        orderBy("fechaCreacion", "desc"), 
-        limit(50) 
-      );
-      const snapV = await getDocs(qViajes);
-      setViajes(snapV.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubVehiculos = onSnapshot(collection(db, "vehiculos"), (snap) => {
+      setUnidades(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error unidades en tiempo real:", error));
 
-      const qReportes = query(
-        collection(db, "reportes"),
-        orderBy("fechaEnvio", "desc"),
-        limit(100)
-      );
-      const snapR = await getDocs(qReportes);
-      setReportes(snapR.docs.map(d => ({ id: d.id, ...d.data() })));
-      
-      cargarSugerencias();
-    } catch (e) { 
-        console.error("Error al cargar datos:", e); 
-    }
-  };
+    const unsubChoferes = onSnapshot(collection(db, "choferes"), (snap) => {
+      setChoferes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error choferes en tiempo real:", error));
 
-  useEffect(() => { cargarDatos(); }, []);
+    const unsubClientes = onSnapshot(collection(db, "clientes"), (snap) => {
+      setClientes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error clientes en tiempo real:", error));
+
+    const qViajes = query(collection(db, "viajes"), orderBy("fechaCreacion", "desc"), limit(50));
+    const unsubViajes = onSnapshot(qViajes, (snap) => {
+      setViajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error viajes en tiempo real:", error));
+
+    const qReportes = query(collection(db, "reportes"), orderBy("fechaEnvio", "desc"), limit(100));
+    const unsubReportes = onSnapshot(qReportes, (snap) => {
+      setReportes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => console.error("Error reportes en tiempo real:", error));
+
+    // Limpieza de los listeners cuando el componente se desmonta
+    return () => {
+      unsubVehiculos();
+      unsubChoferes();
+      unsubClientes();
+      unsubViajes();
+      unsubReportes();
+    };
+  }, []); 
 
   const handleAgregar = async (coleccion) => {
     let objetoNuevo = {};
@@ -170,15 +167,12 @@ function App() {
       setNuevoCliente('');
       setCorreoNuevo('');
     }
-
     message.success("Registro agregado correctamente");
-    cargarDatos();
   };
 
   const handleEliminar = async (coleccion, id) => {
     if (window.confirm("¿Deseas eliminar este registro?")) {
       await deleteDoc(doc(db, coleccion, id));
-      cargarDatos();
     }
   };
 
@@ -190,7 +184,6 @@ function App() {
         fechaFinalizacion: new Date().toISOString() 
       });
       message.success("Viaje finalizado correctamente");
-      cargarDatos();
     } catch (e) {
       console.error("Error al terminar viaje:", e);
       message.error("No se pudo finalizar el viaje");
@@ -205,7 +198,6 @@ function App() {
       try {
         await updateDoc(doc(db, "vehiculos", record.id), { estado: 'Listo' });
         message.success(`Unidad ${record.nombre} habilitada correctamente`);
-        cargarDatos();
       } catch (e) {
         message.error("Error al habilitar unidad");
       }
@@ -217,7 +209,6 @@ function App() {
       await updateDoc(doc(db, "vehiculos", unidadAfectada.id), { estado: motivoSeleccionado });
       message.warning(`Unidad ${unidadAfectada.nombre} enviada a: ${motivoSeleccionado}`);
       setMostrarModalMotivo(false);
-      cargarDatos();
     } catch (e) {
       message.error("Error al actualizar estado");
     }
@@ -240,7 +231,6 @@ function App() {
     setCargandoViaje(true);
 
     try {
-      // AUTOGUARDADO DE MENÚS INTELIGENTES EN NUEVO VIAJE
       await guardarSugerenciaAutomatica('caja', datosNuevoViaje.caja);
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
       await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
@@ -295,7 +285,6 @@ function App() {
         origen: '', destino: '', correoEnvio: ''
       });
       
-      cargarDatos();
     } catch (e) {
       console.error("Error general:", e);
       message.error("Hubo un problema al procesar el viaje");
@@ -312,7 +301,6 @@ function App() {
     }
 
     try {
-      // AUTOGUARDADO DE MENÚS INTELIGENTES EN BITÁCORA
       await guardarSugerenciaAutomatica('estatus', info.estatus);
       await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
@@ -376,7 +364,6 @@ function App() {
     }));
   };
 
-  // --- COMPONENTE DE SELECT INTELIGENTE (REUTILIZABLE) ---
   const SelectInteligente = ({ categoria, value, onChange, placeholder }) => (
     <Select
       mode="tags"
@@ -560,7 +547,6 @@ function App() {
             </>
           )}
 
-          {/* ----- PASO 1: APLICACIÓN DE LA VISTA HISTORIAL ----- */}
           {vistaActual === 'historial' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
@@ -584,7 +570,6 @@ function App() {
               />
             </div>
           )}
-          {/* ---------------------------------------------------- */}
 
           {vistaActual === 'reportes' && (
             <div>
