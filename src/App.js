@@ -175,6 +175,20 @@ function App() {
     try {
       const viajeRef = doc(db, "viajes", viajeId);
       await updateDoc(viajeRef, { 
+        estatus: 'finalizado',
+        fechaFinalizacion: new Date().toISOString() 
+      });
+      message.success("Viaje finalizado correctamente");
+    } catch (e) {
+      console.error("Error al terminar viaje:", e);
+      message.error("No se pudo finalizar el viaje");
+    }
+  };
+
+  const handleMoverAEspera = async (viajeId) => {
+    try {
+      const viajeRef = doc(db, "viajes", viajeId);
+      await updateDoc(viajeRef, { 
         estatus: 'espera',
         fechaFinalizacion: new Date().toISOString() 
       });
@@ -209,7 +223,6 @@ function App() {
     }
   };
 
-  // FUNCIÓN ACTUALIZADA: CREACIÓN DE VIAJE CON CORREO EN FORMATO TABLA
   const handleCrearViaje = async () => {
     if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer || !datosNuevoViaje.cp) {
       return message.warning("Por favor completa los campos obligatorios resaltados");
@@ -243,7 +256,6 @@ function App() {
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
       if (datosNuevoViaje.correoEnvio) {
-        // 1. CONSTRUIR TABLA HTML PARA NUEVO VIAJE (Formato Vertical)
         const tablaNuevoViajeHTML = `
           <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
             <p style="text-align: center; font-weight: bold; background-color: #fff2cc; padding: 5px; margin-bottom: 0; width: fit-content; margin-left: auto; margin-right: auto;">Nuevo viaje foraneo</p>
@@ -290,7 +302,6 @@ function App() {
           </div>
         `;
 
-        // 2. ENVIAR USANDO LA VARIABLE DE CONTENIDO HTML
         const templateParams = {
           para_correo: datosNuevoViaje.correoEnvio,
           subject: `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
@@ -636,18 +647,32 @@ function App() {
                       { 
                         title: 'Acciones', 
                         render: (_, record) => (
-                          <Popconfirm
-                            title="¿Finalizar viaje?"
-                            description="¿Estás seguro de que este viaje ha terminado y pasará a espera?"
-                            onConfirm={() => handleTerminarViaje(record.id)}
-                            okText="En espera"
-                            cancelText="Cancelar"
-                            okButtonProps={{ type: 'primary' }}
-                          >
-                            <Button danger size="small">
-                              Terminar
-                            </Button>
-                          </Popconfirm>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <Popconfirm
+                              title="¿Enviar a espera?"
+                              description="La unidad pasará a la lista de espera de carga."
+                              onConfirm={() => handleMoverAEspera(record.id)}
+                              okText="Confirmar"
+                              cancelText="Cancelar"
+                            >
+                              <Button size="small" style={{ backgroundColor: '#1677ff', color: 'white', border: 'none' }}>
+                                En espera
+                              </Button>
+                            </Popconfirm>
+
+                            <Popconfirm
+                              title="¿Finalizar viaje?"
+                              description="¿Estás seguro de que este viaje ha terminado? Pasará al historial."
+                              onConfirm={() => handleTerminarViaje(record.id)}
+                              okText="Sí, terminar"
+                              cancelText="No"
+                              okButtonProps={{ danger: true }}
+                            >
+                              <Button danger size="small">
+                                Terminar
+                              </Button>
+                            </Popconfirm>
+                          </div>
                         ) 
                       },
                       { title: 'Fecha', dataIndex: 'fecha' }, 
