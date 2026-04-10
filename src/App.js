@@ -255,84 +255,102 @@ function App() {
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
-      // BLOQUE DE ENVÍO DE CORREO MEJORADO
+      // LÓGICA DE DESTINATARIOS AUTOMÁTICOS
+      const correosInternos = [
+        "t.foraneo@transportesvargas.com",
+        "manuel.ochoa@transportesvargas.com",
+        "monitoreo@transportesvargas.com",
+        "seguridadtransportesvargas@gmail.com",
+        "control@transportesvargas.com",
+        "logistica@transportesvargas.com",
+        "trafico@transportesvargas.com",
+        "seguridad@transportesvargas.com",
+        "seguridad2@transportesvargas.com",
+        "traficovargasdiaz@gmail.com",
+        "silvia@vargasinterlogistics.com"
+      ];
+
+      // Combinar lista interna con el correo opcional del formulario
+      let listaFinalDestinatarios = [...correosInternos];
       if (datosNuevoViaje.correoEnvio) {
-        console.log("Intentando enviar correo a:", datosNuevoViaje.correoEnvio);
+        listaFinalDestinatarios.push(datosNuevoViaje.correoEnvio);
+      }
+
+      const destinatariosString = listaFinalDestinatarios.join(", ");
+      console.log("Enviando notificación de nuevo viaje a:", destinatariosString);
+
+      const tablaNuevoViajeHTML = `
+        <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
+          <p style="text-align: center; font-weight: bold; background-color: #fff2cc; padding: 5px; margin-bottom: 0; width: fit-content; margin-left: auto; margin-right: auto;">Nuevo viaje foraneo</p>
+          <table style="width: 100%; max-width: 800px; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-top: 5px;">
+            <tbody>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px; width: 30%;">Fecha y hora de salida:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.fecha} ${nuevoRegistro.hora}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Tractor:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.unidad || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Remolque:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.caja || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Chofer:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.chofer || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Cliente:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cliente || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Origen:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.origen || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Destino:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.destino || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;"># Carta Porte:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cp || ''}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
+                <td style="border: 1px solid #000; padding: 5px;">Pendiente</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+
+      const templateParams = {
+        para_correo: destinatariosString,
+        unidad: datosNuevoViaje.unidad,
+        subject: `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
+        contenido_tabla: tablaNuevoViajeHTML 
+      };
+
+      try {
+        const serviceId = process.env.REACT_APP_EMAILJS_SERVICE_ID;
+        const templateId = process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID;
+        const publicKey = process.env.REACT_APP_EMAILJS_PUBLIC_KEY;
+
+        await emailjs.send(serviceId, templateId, templateParams, publicKey);
         
-        const tablaNuevoViajeHTML = `
-          <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
-            <p style="text-align: center; font-weight: bold; background-color: #fff2cc; padding: 5px; margin-bottom: 0; width: fit-content; margin-left: auto; margin-right: auto;">Nuevo viaje foraneo</p>
-            <table style="width: 100%; max-width: 800px; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-top: 5px;">
-              <tbody>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px; width: 30%;">Fecha y hora de salida:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.fecha} ${nuevoRegistro.hora}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Tractor:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.unidad || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Remolque:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.caja || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Chofer:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.chofer || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Cliente:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cliente || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Origen:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.origen || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Destino:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.destino || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;"># Carta Porte:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cp || ''}</td>
-                </tr>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
-                  <td style="border: 1px solid #000; padding: 5px;">Pendiente</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        `;
+        await addDoc(collection(db, "logs_envios"), {
+          viajeId: docRef.id,
+          destinatarios: destinatariosString,
+          unidad: datosNuevoViaje.unidad,
+          fechaEnvio: new Date().toISOString(),
+          tipo: 'Creación de Viaje (Notificación Automática Interna)'
+        });
 
-        const templateParams = {
-          para_correo: datosNuevoViaje.correoEnvio,
-          subject: `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
-          contenido_tabla: tablaNuevoViajeHTML 
-        };
-
-        try {
-          const serviceId = process.env.REACT_APP_EMAILJS_SERVICE_ID;
-          const templateId = process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID;
-          const publicKey = process.env.REACT_APP_EMAILJS_PUBLIC_KEY;
-
-          console.log("Usando Template ID:", templateId);
-
-          await emailjs.send(serviceId, templateId, templateParams, publicKey);
-          
-          await addDoc(collection(db, "logs_envios"), {
-            viajeId: docRef.id,
-            destinatario: datosNuevoViaje.correoEnvio,
-            unidad: datosNuevoViaje.unidad,
-            fechaEnvio: new Date().toISOString(),
-            tipo: 'Creación de Viaje (Formato Tabla)'
-          });
-
-          message.info("Correo de notificación enviado y registrado");
-        } catch (mailError) {
-          console.error("Error crítico al enviar correo EmailJS:", mailError);
-          message.error("Viaje guardado, pero falló el envío del correo. Revisa la consola.");
-        }
+        message.info("Notificación de viaje enviada al equipo interno");
+      } catch (mailError) {
+        console.error("Error al enviar notificación interna:", mailError);
+        message.error("Viaje guardado, pero falló el envío de la notificación interna.");
       }
 
       message.success("Viaje creado con éxito");
