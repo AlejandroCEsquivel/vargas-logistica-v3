@@ -341,6 +341,66 @@ function App() {
     }
   };
 
+  // NUEVA FUNCIÓN: ENVÍO MASIVO A CORREOS INTERNOS
+  const handleEnviarBitacoraMasiva = async () => {
+    if (unidadesSeleccionadasBitacora.length === 0) {
+      return message.warning("No hay unidades seleccionadas para enviar.");
+    }
+
+    const correosInternos = [
+      "t.foraneo@transportesvargas.com",
+      "manuel.ochoa@transportesvargas.com",
+      "monitoreo@transportesvargas.com",
+      "seguridadtransportesvargas@gmail.com",
+      "control@transportesvargas.com",
+      "logistica@transportesvargas.com",
+      "trafico@transportesvargas.com",
+      "seguridad@transportesvargas.com",
+      "seguridad2@transportesvargas.com",
+      "traficovargasdiaz@gmail.com",
+      "silvia@vargasinterlogistics.com"
+    ].join(", ");
+
+    message.loading({ content: "Enviando reportes internos...", key: "envioMasivo" });
+
+    try {
+      for (const nombreUnidad of unidadesSeleccionadasBitacora) {
+        const info = datosBitacora[nombreUnidad] || {};
+        
+        // Guardamos en base de datos primero
+        await addDoc(collection(db, "reportes_bitacora"), {
+          unidad: nombreUnidad,
+          ...info,
+          fechaEnvio: new Date().toISOString(),
+          tipoEnvio: "Masivo Interno"
+        });
+
+        // Enviamos correo masivo para esta unidad
+        const templateParams = {
+          para_correo: correosInternos,
+          unidad: nombreUnidad,
+          estatus: info.estatus || 'N/A',
+          ubicacion: info.ubicacion || 'N/A',
+          velocidad: info.velocidad || 'N/A',
+          cliente: info.cliente || 'N/A',
+          lugar: info.lugar || 'N/A',
+          link: info.link || 'Sin enlace'
+        };
+
+        await emailjs.send(
+          process.env.REACT_APP_EMAILJS_SERVICE_ID,
+          process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
+          templateParams,
+          process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+        );
+      }
+      message.success({ content: "Todos los reportes internos fueron enviados", key: "envioMasivo" });
+    } catch (error) {
+      console.error("Error en envío masivo:", error);
+      message.error({ content: "Error al realizar el envío masivo", key: "envioMasivo" });
+    }
+  };
+
   const obtenerDatosTabla = () => {
     if (pestañaActiva === 'yarda') {
         return unidades; 
@@ -734,8 +794,9 @@ function App() {
                 </div>
                 <X onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); }} style={{ cursor: 'pointer' }} />
               </div>
+
               {unidadesSeleccionadasBitacora.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 450px))', gap: '25px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 450px))', gap: '25px', marginBottom: '80px' }}>
                   {unidadesSeleccionadasBitacora.map(nombreUnidad => (
                     <div key={nombreUnidad} style={{ background: '#1a1a1a', borderRadius: '4px', border: '1px solid #333' }}>
                       <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6' }}>{nombreUnidad}</div>
@@ -762,12 +823,18 @@ function App() {
                             <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#ddd' }}>Enviar reporte a:</label>
                             <Input placeholder="Correo del destinatario" value={datosBitacora[nombreUnidad]?.correoEnvio || ''} onChange={e => handleInputBitacora(nombreUnidad, 'correoEnvio', e.target.value)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #3b82f6' }} />
                         </div>
-                        <Button type="primary" block style={{ height: '40px', fontWeight: 'bold' }} onClick={() => handleEnviarBitacora(nombreUnidad)}>Enviar y Guardar reporte</Button>
+                        <Button type="primary" block style={{ height: '40px', fontWeight: 'bold' }} onClick={() => handleEnviarBitacora(nombreUnidad)}>Enviar correo a cliente</Button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+
+              {/* FOOTER DEL MODAL CON EL BOTÓN ENVIAR MASIVO */}
+              <div style={{ position: 'sticky', bottom: '-40px', left: '-40px', right: '-40px', background: '#000', padding: '20px 40px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '15px', zIndex: 10 }}>
+                <Button onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); }} style={{ background: '#262626', color: '#fff', border: 'none' }}>Cancelar</Button>
+                <Button type="primary" onClick={handleEnviarBitacoraMasiva} style={{ height: '32px', padding: '0 25px' }}>Enviar</Button>
+              </div>
             </div>
           )}
 
