@@ -560,6 +560,32 @@ function App() {
             </>
           )}
 
+          {/* ----- PASO 1: APLICACIÓN DE LA VISTA HISTORIAL ----- */}
+          {vistaActual === 'historial' && (
+            <div>
+              <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
+              <Table 
+                dataSource={viajes.filter(v => v.estatus === 'finalizado')} 
+                rowKey="id"
+                columns={[
+                  { title: 'Fecha', dataIndex: 'fecha' }, 
+                  { title: 'Carta porte', dataIndex: 'cp' }, 
+                  { title: 'Hora salida', dataIndex: 'hora' },
+                  { title: 'Unidad', dataIndex: 'unidad' }, 
+                  { title: 'Chofer', dataIndex: 'chofer' }, 
+                  { title: 'Caja', dataIndex: 'caja' },
+                  { title: 'Origen', dataIndex: 'origen' }, 
+                  { title: 'Destino', dataIndex: 'destino' }, 
+                  { title: 'Cliente', dataIndex: 'cliente' }
+                ]}
+                size="small"
+                pagination={{ pageSize: 15 }}
+                locale={{ emptyText: <Empty description="No hay viajes finalizados aún" /> }}
+              />
+            </div>
+          )}
+          {/* ---------------------------------------------------- */}
+
           {vistaActual === 'reportes' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
