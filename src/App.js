@@ -175,13 +175,13 @@ function App() {
     try {
       const viajeRef = doc(db, "viajes", viajeId);
       await updateDoc(viajeRef, { 
-        estatus: 'finalizado',
+        estatus: 'espera',
         fechaFinalizacion: new Date().toISOString() 
       });
-      message.success("Viaje finalizado correctamente");
+      message.success("Viaje enviado a espera de carga");
     } catch (e) {
-      console.error("Error al terminar viaje:", e);
-      message.error("No se pudo finalizar el viaje");
+      console.error("Error al enviar viaje a espera:", e);
+      message.error("No se pudo actualizar el viaje");
     }
   };
 
@@ -638,11 +638,11 @@ function App() {
                         render: (_, record) => (
                           <Popconfirm
                             title="¿Finalizar viaje?"
-                            description="¿Estás seguro de que este viaje ha terminado?"
+                            description="¿Estás seguro de que este viaje ha terminado y pasará a espera?"
                             onConfirm={() => handleTerminarViaje(record.id)}
-                            okText="Sí, terminar"
-                            cancelText="No"
-                            okButtonProps={{ danger: true }}
+                            okText="En espera"
+                            cancelText="Cancelar"
+                            okButtonProps={{ type: 'primary' }}
                           >
                             <Button danger size="small">
                               Terminar
