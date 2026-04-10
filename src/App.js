@@ -452,6 +452,13 @@ function App() {
       
       for (const nombreUnidad of unidadesSeleccionadasBitacora) {
         const info = datosBitacora[nombreUnidad] || {};
+        
+        // --- LÓGICA DE APRENDIZAJE / AUTOGUARDADO AGREGADA AQUÍ ---
+        await guardarSugerenciaAutomatica('estatus', info.estatus);
+        await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
+        await guardarSugerenciaAutomatica('velocidad', info.velocidad);
+        await guardarSugerenciaAutomatica('lugar', info.lugar);
+
         const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && v.estatus === 'viajes');
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
