@@ -345,6 +345,7 @@ function App() {
     }
   };
 
+  // FUNCIÓN ACTUALIZADA: ENVÍO CONSOLIDADO (UN SOLO CORREO CON TABLA PROFESIONAL)
   const handleEnviarBitacoraMasiva = async () => {
     if (unidadesSeleccionadasBitacora.length === 0) {
       return message.warning("No hay unidades seleccionadas para enviar.");
@@ -364,43 +365,89 @@ function App() {
       "silvia@vargasinterlogistics.com"
     ].join(", ");
 
-    message.loading({ content: "Enviando reportes internos...", key: "envioMasivo" });
+    message.loading({ content: "Generando reporte consolidado...", key: "envioMasivo" });
 
     try {
+      // 1. CONSTRUIR FILAS DE LA TABLA HTML (Idéntica a la imagen image_50b4c3.png)
+      let filasHTML = "";
+      
       for (const nombreUnidad of unidadesSeleccionadasBitacora) {
         const info = datosBitacora[nombreUnidad] || {};
         
+        // Buscamos datos del viaje activo para Chofer y Remolque (Caja)
+        const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && v.estatus === 'viajes');
+        const chofer = viajeActivo?.chofer || "N/A";
+        const remolque = viajeActivo?.caja || "N/A";
+
+        filasHTML += `
+          <tr>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${nombreUnidad}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${chofer}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${remolque}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.estatus || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.ubicacion || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.velocidad || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.cliente || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.lugar || 'N/A'}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.link || 'N/A'}</td>
+          </tr>
+        `;
+
+        // Registro individual en Firebase
         await addDoc(collection(db, "reportes_bitacora"), {
           unidad: nombreUnidad,
           ...info,
           fechaEnvio: new Date().toISOString(),
-          tipoEnvio: "Masivo Interno"
+          tipoEnvio: "Consolidado Interno"
         });
-
-        const templateParams = {
-          para_correo: correosInternos,
-          unidad: nombreUnidad,
-          estatus: info.estatus || 'N/A',
-          ubicacion: info.ubicacion || 'N/A',
-          velocidad: info.velocidad || 'N/A',
-          cliente: info.cliente || 'N/A',
-          lugar: info.lugar || 'N/A',
-          link: info.link || 'Sin enlace'
-        };
-
-        await emailjs.send(
-          process.env.REACT_APP_EMAILJS_SERVICE_ID,
-          process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
-          templateParams,
-          process.env.REACT_APP_EMAILJS_PUBLIC_KEY
-        );
       }
-      message.success({ content: "Todos los reportes internos fueron enviados", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: "Envío Masivo Exitoso: Todos los reportes han sido distribuidos a los correos internos.", tipo: 'success' });
+
+      // 2. CREAR TABLA CON ESTILO INSTITUCIONAL
+      const tablaConsolidadaHTML = `
+        <div style="font-family: Arial, sans-serif;">
+          <h3 style="color: #333;">Unidades en viaje o espera de carga:</h3>
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+            <thead>
+              <tr style="background-color: #f2f2f2;">
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Vehículo</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Chofer</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Remolque</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Estatus</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Ubicación</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Velocidad / Motivo detenido</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Cliente</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Lugar</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filasHTML}
+            </tbody>
+          </table>
+          <p style="font-size: 10px; color: #666; margin-top: 15px;">Reporte generado automáticamente por Bitácora Foránea - Transporte Vargas</p>
+        </div>
+      `;
+
+      // 3. ENVÍO ÚNICO POR EMAILJS
+      const templateParams = {
+        para_correo: correosInternos,
+        subject: `REPORTE DE ESTATUS CONSOLIDADO - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        contenido_tabla: tablaConsolidadaHTML 
+      };
+
+      await emailjs.send(
+        process.env.REACT_APP_EMAILJS_SERVICE_ID,
+        process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID, 
+        templateParams,
+        process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+      );
+
+      message.success({ content: "Reporte consolidado enviado con éxito", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso: Se envió una sola tabla con todas las unidades activas al equipo de Tráfico.", tipo: 'success' });
     } catch (error) {
-      console.error("Error en envío masivo:", error);
-      message.error({ content: "Error al realizar el envío masivo", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: `Error en Envío Masivo: ${error.message || 'Error de conexión o configuración.'}`, tipo: 'error' });
+      console.error("Error en envío consolidado:", error);
+      message.error({ content: "Error al realizar el envío consolidado", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: `Error en Reporte Consolidado: ${error.message || 'Fallo al procesar el HTML'}`, tipo: 'error' });
     }
   };
 
@@ -421,7 +468,6 @@ function App() {
     }));
   };
 
-  // NUEVA FUNCIÓN PARA ABRIR BITÁCORA CON UNIDADES PRE-CARGADAS
   const handleAbrirBitacoraInteligente = () => {
     const unidadesEnViaje = viajes
       .filter(v => v.estatus === 'viajes')
