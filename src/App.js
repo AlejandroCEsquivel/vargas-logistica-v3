@@ -433,7 +433,7 @@ function App() {
 
         await enviarConBrevo(
           destinatariosString,
-          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
+          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp} - ${nuevoRegistro.hora}`,
           tablaNuevoViajeHTML
         );
         
@@ -494,9 +494,12 @@ function App() {
       
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
+      const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
+
       const contenidoHtmlIndividual = `
         <div style="font-family: Arial, sans-serif; color: #333;">
           <h2 style="color: #164e63;">Estatus Unidad: ${unidadNombre}</h2>
+          <p><b>Hora Reporte:</b> ${horaString}</p>
           <p><b>Estatus:</b> ${info.estatus || 'N/A'}</p>
           <p><b>Ubicación:</b> ${info.ubicacion || 'N/A'}</p>
           <p><b>Velocidad:</b> ${info.velocidad || 'N/A'}</p>
@@ -507,7 +510,7 @@ function App() {
 
       await enviarConBrevo(
         info.correoEnvio,
-        `ESTATUS UNIDAD ${unidadNombre} - ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        `ESTATUS UNIDAD ${unidadNombre} - ${horaString}`,
         contenidoHtmlIndividual
       );
       
@@ -563,9 +566,12 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
+        const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
+
         filasViajesHTML += `
           <tr>
             <td style="border: 1px solid #000; padding: 5px;">${nombreUnidad}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${horaString}</td>
             <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
             <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>
             <td style="border: 1px solid #000; padding: 5px;">${info.estatus || ''}</td>
@@ -606,6 +612,7 @@ function App() {
             <thead>
               <tr style="background-color: #f2f2f2;">
                 <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
+                <th style="border: 1px solid #000; padding: 5px;">Hora Rep.</th>
                 <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
                 <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
                 <th style="border: 1px solid #000; padding: 5px;">Estatus</th>
@@ -1121,6 +1128,16 @@ function App() {
                     <div key={nombreUnidad} style={{ background: '#1a1a1a', borderRadius: '4px', border: '1px solid #333' }}>
                       <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6' }}>{nombreUnidad}</div>
                       <div style={{ padding: '25px', background: '#164e63', margin: '15px', borderRadius: '4px' }}>
+                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Hora Rep. :</label>
+                          <TimePicker 
+                            style={{ flex: 1 }} 
+                            format="HH:mm" 
+                            value={datosBitacora[nombreUnidad]?.horaReporte} 
+                            onChange={val => handleInputBitacora(nombreUnidad, 'horaReporte', val)} 
+                            getPopupContainer={(trigger) => trigger.parentNode}
+                            placeholder="Hora del GPS"
+                          />
+                        </div>
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Estatus :</label>
                           <SelectInteligente categoria="estatus" value={datosBitacora[nombreUnidad]?.estatus} onChange={val => handleInputBitacora(nombreUnidad, 'estatus', val)} placeholder="Estatus" />
                         </div>
