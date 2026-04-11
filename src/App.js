@@ -51,6 +51,10 @@ function App() {
 
   const [bannerBitacora, setBannerBitacora] = useState({ visible: false, mensaje: '', tipo: 'success' });
 
+  // ESTADOS PARA MODO EDICIÓN
+  const [editandoId, setEditandoId] = useState(null);
+  const [tipoEdicion, setTipoEdicion] = useState(null);
+
   const [sugerencias, setSugerencias] = useState({
     estatus: [],
     ubicacion: [],
@@ -167,29 +171,74 @@ function App() {
     };
   }, []); 
 
+  // FUNCIÓN PARA PREPARAR LA EDICIÓN
+  const prepararEdicion = (coleccion, record) => {
+    setEditandoId(record.id);
+    setTipoEdicion(coleccion);
+    if (coleccion === 'vehiculos') setNuevoVehiculo(record.nombre);
+    if (coleccion === 'choferes') setNuevoChofer(record.nombre);
+    if (coleccion === 'clientes') {
+      setNuevoCliente(record.nombre);
+      setCorreoNuevo(record.correo || '');
+    }
+  };
+
+  const cancelarEdicion = () => {
+    setEditandoId(null);
+    setTipoEdicion(null);
+    setNuevoVehiculo('');
+    setNuevoChofer('');
+    setNuevoCliente('');
+    setCorreoNuevo('');
+  };
+
   const handleAgregar = async (coleccion) => {
     let objetoNuevo = {};
     
-    if (coleccion === 'vehiculos') {
-      if (!nuevoVehiculo) return;
-      objetoNuevo = { nombre: nuevoVehiculo, estado: 'Listo' };
-      await addDoc(collection(db, "vehiculos"), objetoNuevo);
-      setNuevoVehiculo('');
-    } 
-    else if (coleccion === 'choferes') {
-      if (!nuevoChofer) return;
-      objetoNuevo = { nombre: nuevoChofer };
-      await addDoc(collection(db, "choferes"), objetoNuevo);
-      setNuevoChofer('');
-    } 
-    else if (coleccion === 'clientes') {
-      if (!nuevoCliente) return;
-      objetoNuevo = { nombre: nuevoCliente, correo: correoNuevo };
-      await addDoc(collection(db, "clientes"), objetoNuevo);
-      setNuevoCliente('');
-      setCorreoNuevo('');
+    try {
+      if (coleccion === 'vehiculos') {
+        if (!nuevoVehiculo) return;
+        objetoNuevo = { nombre: nuevoVehiculo };
+        if (editandoId && tipoEdicion === 'vehiculos') {
+          await updateDoc(doc(db, "vehiculos", editandoId), objetoNuevo);
+          message.success("Vehículo actualizado");
+        } else {
+          await addDoc(collection(db, "vehiculos"), { ...objetoNuevo, estado: 'Listo' });
+          message.success("Vehículo agregado");
+        }
+        setNuevoVehiculo('');
+      } 
+      else if (coleccion === 'choferes') {
+        if (!nuevoChofer) return;
+        objetoNuevo = { nombre: nuevoChofer };
+        if (editandoId && tipoEdicion === 'choferes') {
+          await updateDoc(doc(db, "choferes", editandoId), objetoNuevo);
+          message.success("Chofer actualizado");
+        } else {
+          await addDoc(collection(db, "choferes"), objetoNuevo);
+          message.success("Chofer agregado");
+        }
+        setNuevoChofer('');
+      } 
+      else if (coleccion === 'clientes') {
+        if (!nuevoCliente) return;
+        objetoNuevo = { nombre: nuevoCliente, correo: correoNuevo };
+        if (editandoId && tipoEdicion === 'clientes') {
+          await updateDoc(doc(db, "clientes", editandoId), objetoNuevo);
+          message.success("Cliente actualizado");
+        } else {
+          await addDoc(collection(db, "clientes"), objetoNuevo);
+          message.success("Cliente agregado");
+        }
+        setNuevoCliente('');
+        setCorreoNuevo('');
+      }
+      setEditandoId(null);
+      setTipoEdicion(null);
+    } catch (e) {
+      console.error("Error en handleAgregar/Editar:", e);
+      message.error("Error al procesar la solicitud");
     }
-    message.success("Registro agregado correctamente");
   };
 
   const handleEliminar = async (coleccion, id) => {
@@ -350,7 +399,6 @@ function App() {
       `;
 
       try {
-        // Notificación de carga
         const avisoEnvio = message.loading("Enviando notificación de viaje vía Brevo...", 0);
 
         await enviarConBrevo(
@@ -359,7 +407,7 @@ function App() {
           tablaNuevoViajeHTML
         );
         
-        avisoEnvio(); // Cerramos el loading
+        avisoEnvio();
 
         await addDoc(collection(db, "logs_envios"), {
           viajeId: docRef.id,
@@ -371,7 +419,7 @@ function App() {
 
         message.success("Viaje creado y notificación enviada correctamente");
       } catch (mailError) {
-        message.destroy(); // Limpiamos mensajes en caso de error
+        message.destroy();
         console.error("Error al enviar notificación Brevo:", mailError);
         message.error(`Viaje guardado, pero el correo falló: ${mailError.message}`);
       }
@@ -379,7 +427,7 @@ function App() {
       setMostrarModalNuevoViaje(false);
       
       setDatosNuevoViaje({
-        fecha: null, cp: '', hour: null, unidad: undefined, 
+        fecha: null, cp: '', hora: null, unidad: undefined, 
         chofer: undefined, caja: '', cliente: undefined, 
         origen: '', destino: '', correoEnvio: ''
       });
@@ -400,7 +448,6 @@ function App() {
     }
 
     try {
-      // Notificación de carga específica para este envío
       message.loading({ content: `Enviando reporte de ${unidadNombre}...`, key: 'envioInd' });
 
       await guardarSugerenciaAutomatica('estatus', info.estatus);
@@ -582,11 +629,20 @@ function App() {
   };
 
   const handleAbrirBitacoraInteligente = () => {
-    const unidadesEnViaje = viajes
-      .filter(v => v.estatus === 'viajes')
-      .map(v => v.unidad);
-    
-    setUnidadesSeleccionadasBitacora(unidadesEnViaje);
+    const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes');
+    const nuevasBitacoras = {};
+
+    unidadesEnViaje.forEach(v => {
+      // BUSCAR CORREO DEL CLIENTE AUTOMÁTICAMENTE
+      const clienteInfo = clientes.find(c => c.nombre === v.cliente);
+      nuevasBitacoras[v.unidad] = {
+        cliente: v.cliente,
+        correoEnvio: clienteInfo?.correo || '' // JALAR CORREO SI EXISTE
+      };
+    });
+
+    setDatosBitacora(nuevasBitacoras);
+    setUnidadesSeleccionadasBitacora(unidadesEnViaje.map(v => v.unidad));
     setMostrarModalBitacora(true);
   };
 
@@ -834,9 +890,12 @@ function App() {
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del vehiculo</p>
                       <Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
-                      <Button type="primary" onClick={() => handleAgregar('vehiculos')}>Agregar</Button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <Button type="primary" onClick={() => handleAgregar('vehiculos')}>{editandoId && tipoEdicion === 'vehiculos' ? 'Guardar Cambios' : 'Agregar'}</Button>
+                        {editandoId && tipoEdicion === 'vehiculos' && <Button onClick={cancelarEdicion}>Cancelar</Button>}
+                      </div>
                     </div>
-                    <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
+                    <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('vehiculos', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
                 <Panel header="Choferes" key="2" style={{ borderBottom: '1px solid #222' }}>
@@ -844,9 +903,12 @@ function App() {
                     <div style={{ width: '250px', textAlign: 'center' }}>
                       <p>Nombre del chofer</p>
                       <Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
-                      <Button type="primary" onClick={() => handleAgregar('choferes')}>Agregar</Button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <Button type="primary" onClick={() => handleAgregar('choferes')}>{editandoId && tipoEdicion === 'choferes' ? 'Guardar Cambios' : 'Agregar'}</Button>
+                        {editandoId && tipoEdicion === 'choferes' && <Button onClick={cancelarEdicion}>Cancelar</Button>}
+                      </div>
                     </div>
-                    <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
+                    <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('choferes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
                 <Panel header="Clientes" key="3" style={{ borderBottom: '1px solid #222' }}>
@@ -856,9 +918,12 @@ function App() {
                       <Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} />
                       <p>Correo</p>
                       <Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
-                      <Button type="primary" onClick={() => handleAgregar('clientes')}>Agregar</Button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <Button type="primary" onClick={() => handleAgregar('clientes')}>{editandoId && tipoEdicion === 'clientes' ? 'Guardar Cambios' : 'Agregar'}</Button>
+                        {editandoId && tipoEdicion === 'clientes' && <Button onClick={cancelarEdicion}>Cancelar</Button>}
+                      </div>
                     </div>
-                    <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button> }]} size="small" rowKey="id" /></div>
+                    <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('clientes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
               </Collapse>
@@ -929,11 +994,23 @@ function App() {
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Caja :</label>
                     <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
+                  
+                  {/* AUTO-COMPLETAR CORREO AL SELECCIONAR CLIENTE */}
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
-                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, cliente: val})} getPopupContainer={(trigger) => trigger.parentNode} >
+                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} 
+                      onChange={(val) => {
+                        const clienteEncontrado = clientes.find(c => c.nombre === val);
+                        setDatosNuevoViaje({
+                          ...datosNuevoViaje, 
+                          cliente: val, 
+                          correoEnvio: clienteEncontrado?.correo || '' 
+                        });
+                      }} 
+                      getPopupContainer={(trigger) => trigger.parentNode} >
                       {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
                     </Select>
                   </div>
+                  
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Origen :</label>
                     <SelectInteligente categoria="origen" value={datosNuevoViaje.origen} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, origen: val})} placeholder="Escribe o selecciona origen" />
                   </div>
@@ -1008,7 +1085,14 @@ function App() {
                           <SelectInteligente categoria="velocidad" value={datosBitacora[nombreUnidad]?.velocidad} onChange={val => handleInputBitacora(nombreUnidad, 'velocidad', val)} placeholder="Velocidad" />
                         </div>
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Cliente :</label>
-                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} onChange={val => handleInputBitacora(nombreUnidad, 'cliente', val)} getPopupContainer={(trigger) => trigger.parentNode}>
+                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} 
+                            onChange={val => {
+                                handleInputBitacora(nombreUnidad, 'cliente', val);
+                                // ACTUALIZAR CORREO SI CAMBIA CLIENTE EN BITACORA
+                                const clienteInfo = clientes.find(c => c.nombre === val);
+                                handleInputBitacora(nombreUnidad, 'correoEnvio', clienteInfo?.correo || '');
+                            }} 
+                            getPopupContainer={(trigger) => trigger.parentNode}>
                               {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
                           </Select>
                         </div>
