@@ -350,12 +350,17 @@ function App() {
       `;
 
       try {
+        // Notificación de carga
+        const avisoEnvio = message.loading("Enviando notificación de viaje vía Brevo...", 0);
+
         await enviarConBrevo(
           destinatariosString,
           `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
           tablaNuevoViajeHTML
         );
         
+        avisoEnvio(); // Cerramos el loading
+
         await addDoc(collection(db, "logs_envios"), {
           viajeId: docRef.id,
           destinatarios: destinatariosString,
@@ -364,17 +369,17 @@ function App() {
           tipo: 'Creación de Viaje (Notificación Automática Interna via Brevo)'
         });
 
-        message.info("Notificación enviada vía Brevo al equipo interno");
+        message.success("Viaje creado y notificación enviada correctamente");
       } catch (mailError) {
+        message.destroy(); // Limpiamos mensajes en caso de error
         console.error("Error al enviar notificación Brevo:", mailError);
-        message.error("Viaje guardado, pero falló el envío de la notificación.");
+        message.error(`Viaje guardado, pero el correo falló: ${mailError.message}`);
       }
 
-      message.success("Viaje creado con éxito");
       setMostrarModalNuevoViaje(false);
       
       setDatosNuevoViaje({
-        fecha: null, cp: '', hora: null, unidad: undefined, 
+        fecha: null, cp: '', hour: null, unidad: undefined, 
         chofer: undefined, caja: '', cliente: undefined, 
         origen: '', destino: '', correoEnvio: ''
       });
@@ -395,6 +400,9 @@ function App() {
     }
 
     try {
+      // Notificación de carga específica para este envío
+      message.loading({ content: `Enviando reporte de ${unidadNombre}...`, key: 'envioInd' });
+
       await guardarSugerenciaAutomatica('estatus', info.estatus);
       await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
@@ -433,11 +441,11 @@ function App() {
         tipo: 'Reporte de Bitácora (Brevo)'
       });
 
-      message.success(`Reporte de ${unidadNombre} enviado vía Brevo`);
-      setBannerBitacora({ visible: true, mensaje: `Envío exitoso: El reporte de la unidad ${unidadNombre} fue enviado.`, tipo: 'success' });
+      message.success({ content: `¡Reporte de ${unidadNombre} enviado!`, key: 'envioInd' });
+      setBannerBitacora({ visible: true, mensaje: `Envío exitoso: El reporte de la unidad ${unidadNombre} fue entregado a Brevo.`, tipo: 'success' });
     } catch (e) {
       console.error("Error al enviar con Brevo:", e);
-      message.error("Error al procesar el envío.");
+      message.error({ content: `Fallo el envío de ${unidadNombre}`, key: 'envioInd' });
       setBannerBitacora({ visible: true, mensaje: `Error en el envío (${unidadNombre}): ${e.message}`, tipo: 'error' });
     }
   };
@@ -461,7 +469,7 @@ function App() {
       "silvia@vargasinterlogistics.com"
     ].join(", ");
 
-    message.loading({ content: "Generando reporte consolidado con Brevo...", key: "envioMasivo" });
+    message.loading({ content: "Generando y enviando reporte consolidado a Tráfico...", key: "envioMasivo" });
 
     try {
       let filasViajesHTML = "";
@@ -547,11 +555,12 @@ function App() {
         tablaConsolidadaHTML
       );
 
-      message.success({ content: "Reporte consolidado enviado con Brevo", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso vía Brevo.", tipo: 'success' });
+      message.success({ content: "¡Reporte consolidado enviado exitosamente!", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso vía Brevo. El equipo de Tráfico ya recibió la información.", tipo: 'success' });
     } catch (error) {
       console.error("Error en envío masivo Brevo:", error);
-      message.error({ content: "Error al realizar el envío consolidado", key: "envioMasivo" });
+      message.error({ content: "Error crítico al realizar el envío consolidado", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: `ERROR CRÍTICO: El reporte consolidado no se envió. ${error.message}`, tipo: 'error' });
     }
   };
 
