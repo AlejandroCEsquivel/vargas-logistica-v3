@@ -272,6 +272,17 @@ function App() {
     }
   };
 
+  // NUEVA FUNCIÓN: Eliminar manualmente de "Espera de carga"
+  const handleEliminarEspera = async (id) => {
+    try {
+      await deleteDoc(doc(db, "viajes", id));
+      message.success("Unidad removida de espera correctamente");
+    } catch (e) {
+      console.error("Error al eliminar de espera:", e);
+      message.error("No se pudo remover la unidad");
+    }
+  };
+
   const handleMoverAEspera = async (viajeId) => {
     try {
       const viajeRef = doc(db, "viajes", viajeId);
@@ -327,6 +338,14 @@ function App() {
     setCargandoViaje(true);
 
     try {
+      // --- INICIO: LA ASPIRADORA AL CREAR ---
+      // Borramos registro en espera si la unidad ya sale a un nuevo viaje
+      const registroEnEspera = viajes.find(v => v.unidad === datosNuevoViaje.unidad && v.estatus === 'espera');
+      if (registroEnEspera) {
+        await deleteDoc(doc(db, "viajes", registroEnEspera.id));
+      }
+      // --- FIN: LA ASPIRADORA AL CREAR ---
+
       await guardarSugerenciaAutomatica('caja', datosNuevoViaje.caja);
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
       await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
@@ -805,7 +824,21 @@ function App() {
                       {obtenerDatosTabla().length === 0 ? (
                          <Empty description="No hay unidades en espera" />
                       ) : (
-                        obtenerDatosTabla().map(v => <div key={v.id}>{v.unidad}</div>)
+                        obtenerDatosTabla().map(v => (
+                          <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                            {v.unidad}
+                            <Popconfirm
+                              title="¿Borrar de espera?"
+                              description="¿Eliminar esta unidad de la lista de espera?"
+                              onConfirm={() => handleEliminarEspera(v.id)}
+                              okText="Sí, borrar"
+                              cancelText="Cancelar"
+                              okButtonProps={{ danger: true }}
+                            >
+                              <Trash2 size={22} color="#ff4d4f" style={{ cursor: 'pointer' }} />
+                            </Popconfirm>
+                          </div>
+                        ))
                       )}
                     </div>
                   </div>
