@@ -254,6 +254,17 @@ function App() {
         estatus: 'finalizado',
         fechaFinalizacion: new Date().toISOString() 
       });
+
+      // --- INICIO: OPCIÓN 1 (LA ASPIRADORA REACTIVA) ---
+      const viajeTerminado = viajes.find(v => v.id === viajeId);
+      if (viajeTerminado) {
+        const registroEnEspera = viajes.find(v => v.unidad === viajeTerminado.unidad && v.estatus === 'espera');
+        if (registroEnEspera) {
+          await deleteDoc(doc(db, "viajes", registroEnEspera.id));
+        }
+      }
+      // --- FIN: OPCIÓN 1 ---
+
       message.success("Viaje finalizado correctamente");
     } catch (e) {
       console.error("Error al terminar viaje:", e);
@@ -737,9 +748,11 @@ function App() {
                 {pestañaActiva === 'viajes' && (
                   <Table 
                     dataSource={obtenerDatosTabla()} 
+                    rowKey="id"
                     columns={[
                       { 
                         title: 'Acciones', 
+                        width: 170,
                         render: (_, record) => (
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <Popconfirm
