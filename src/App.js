@@ -3,11 +3,38 @@ import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2 }
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import emailjs from '@emailjs/browser'; 
 import 'antd/dist/reset.css';
 
 const { Option } = Select;
 const { Panel } = Collapse;
+
+// FUNCIÓN HELPER PARA BREVO (REEMPLAZA A EMAILJS)
+const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
+  const listaDestinatarios = destinatarios.split(',').map(email => ({ email: email.trim() }));
+  
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': process.env.REACT_APP_BREVO_API_KEY,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { 
+        name: process.env.REACT_APP_BREVO_SENDER_NAME, 
+        email: process.env.REACT_APP_BREVO_SENDER_EMAIL 
+      },
+      to: listaDestinatarios,
+      subject: asunto,
+      htmlContent: contenidoHtml
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Error en el envío con Brevo');
+  }
+};
 
 function App() {
   const [vistaActual, setVistaActual] = useState('inicio');
@@ -255,7 +282,6 @@ function App() {
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
-      // LÓGICA DE DESTINATARIOS AUTOMÁTICOS
       const correosInternos = [
         "t.foraneo@transportesvargas.com",
         "manuel.ochoa@transportesvargas.com",
@@ -270,14 +296,12 @@ function App() {
         "silvia@vargasinterlogistics.com"
       ];
 
-      // Combinar lista interna con el correo opcional del formulario
       let listaFinalDestinatarios = [...correosInternos];
       if (datosNuevoViaje.correoEnvio) {
         listaFinalDestinatarios.push(datosNuevoViaje.correoEnvio);
       }
 
       const destinatariosString = listaFinalDestinatarios.join(", ");
-      console.log("Enviando notificación de nuevo viaje a:", destinatariosString);
 
       const tablaNuevoViajeHTML = `
         <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
@@ -325,32 +349,25 @@ function App() {
         </div>
       `;
 
-      const templateParams = {
-        para_correo: destinatariosString,
-        unidad: datosNuevoViaje.unidad,
-        subject: `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
-        contenido_tabla: tablaNuevoViajeHTML 
-      };
-
       try {
-        const serviceId = process.env.REACT_APP_EMAILJS_SERVICE_ID;
-        const templateId = process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID;
-        const publicKey = process.env.REACT_APP_EMAILJS_PUBLIC_KEY;
-
-        await emailjs.send(serviceId, templateId, templateParams, publicKey);
+        await enviarConBrevo(
+          destinatariosString,
+          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp}`,
+          tablaNuevoViajeHTML
+        );
         
         await addDoc(collection(db, "logs_envios"), {
           viajeId: docRef.id,
           destinatarios: destinatariosString,
           unidad: datosNuevoViaje.unidad,
           fechaEnvio: new Date().toISOString(),
-          tipo: 'Creación de Viaje (Notificación Automática Interna)'
+          tipo: 'Creación de Viaje (Notificación Automática Interna via Brevo)'
         });
 
-        message.info("Notificación de viaje enviada al equipo interno");
+        message.info("Notificación enviada vía Brevo al equipo interno");
       } catch (mailError) {
-        console.error("Error al enviar notificación interna:", mailError);
-        message.error("Viaje guardado, pero falló el envío de la notificación interna.");
+        console.error("Error al enviar notificación Brevo:", mailError);
+        message.error("Viaje guardado, pero falló el envío de la notificación.");
       }
 
       message.success("Viaje creado con éxito");
@@ -392,38 +409,36 @@ function App() {
       
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
-      const templateParams = {
-        para_correo: info.correoEnvio,
-        unidad: unidadNombre,
-        subject: `ESTATUS UNIDAD ${unidadNombre} - ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-        estatus: info.estatus || 'N/A',
-        ubicacion: info.ubicacion || 'N/A',
-        velocidad: info.velocidad || 'N/A',
-        cliente: info.cliente || 'N/A',
-        lugar: info.lugar || 'N/A',
-        link: info.link || 'Sin enlace'
-      };
+      const contenidoHtmlIndividual = `
+        <div style="font-family: Arial, sans-serif; color: #333;">
+          <h2 style="color: #164e63;">Estatus Unidad: ${unidadNombre}</h2>
+          <p><b>Estatus:</b> ${info.estatus || 'N/A'}</p>
+          <p><b>Ubicación:</b> ${info.ubicacion || 'N/A'}</p>
+          <p><b>Velocidad:</b> ${info.velocidad || 'N/A'}</p>
+          <p><b>Lugar:</b> ${info.lugar || 'N/A'}</p>
+          <p><b>Link:</b> <a href="${info.link || '#'}">Ver rastreo</a></p>
+        </div>
+      `;
 
-      await emailjs.send(
-        process.env.REACT_APP_EMAILJS_SERVICE_ID,
-        process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
-        templateParams,
-        process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+      await enviarConBrevo(
+        info.correoEnvio,
+        `ESTATUS UNIDAD ${unidadNombre} - ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        contenidoHtmlIndividual
       );
       
       await addDoc(collection(db, "logs_envios"), {
         unidad: unidadNombre,
         destinatario: info.correoEnvio,
         fechaEnvio: new Date().toISOString(),
-        tipo: 'Reporte de Bitácora'
+        tipo: 'Reporte de Bitácora (Brevo)'
       });
 
-      message.success(`Reporte de ${unidadNombre} enviado y guardado con éxito`);
-      setBannerBitacora({ visible: true, mensaje: `Envío exitoso: El reporte de la unidad ${unidadNombre} fue enviado al cliente.`, tipo: 'success' });
+      message.success(`Reporte de ${unidadNombre} enviado vía Brevo`);
+      setBannerBitacora({ visible: true, mensaje: `Envío exitoso: El reporte de la unidad ${unidadNombre} fue enviado.`, tipo: 'success' });
     } catch (e) {
-      console.error("Error detallado al procesar el envío:", e);
+      console.error("Error al enviar con Brevo:", e);
       message.error("Error al procesar el envío.");
-      setBannerBitacora({ visible: true, mensaje: `Error en el envío (${unidadNombre}): ${e.message || 'No se pudo completar el proceso.'}`, tipo: 'error' });
+      setBannerBitacora({ visible: true, mensaje: `Error en el envío (${unidadNombre}): ${e.message}`, tipo: 'error' });
     }
   };
 
@@ -446,7 +461,7 @@ function App() {
       "silvia@vargasinterlogistics.com"
     ].join(", ");
 
-    message.loading({ content: "Generando reporte consolidado completo...", key: "envioMasivo" });
+    message.loading({ content: "Generando reporte consolidado con Brevo...", key: "envioMasivo" });
 
     try {
       let filasViajesHTML = "";
@@ -465,15 +480,15 @@ function App() {
 
         filasViajesHTML += `
           <tr>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${nombreUnidad}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${chofer}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${remolque}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.estatus || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.ubicacion || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.velocidad || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.cliente || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.lugar || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${info.link || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${nombreUnidad}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${info.estatus || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${info.ubicacion || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${info.velocidad || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${info.cliente || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${info.lugar || ''}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${info.link || ''}</td>
           </tr>
         `;
 
@@ -481,7 +496,7 @@ function App() {
           unidad: nombreUnidad,
           ...info,
           fechaEnvio: new Date().toISOString(),
-          tipoEnvio: "Consolidado Interno"
+          tipoEnvio: "Consolidado Interno (Brevo)"
         });
       }
 
@@ -493,70 +508,50 @@ function App() {
         const estatusMostrar = (u.estado && u.estado !== 'Listo') ? u.estado : 'Sin viaje';
         filasYardaHTML += `
           <tr>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${u.nombre}</td>
-            <td style="border: 1px solid #000; padding: 5px; text-align: left;">${estatusMostrar}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${u.nombre}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${estatusMostrar}</td>
           </tr>
         `;
       });
 
       const tablaConsolidadaHTML = `
-        <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
-          <p style="margin-bottom: 15px;">Unidades foraneas de viaje o espera de carga:</p>
-          
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-bottom: 30px;">
+        <div style="font-family: 'Times New Roman', serif; color: #000; font-size: 13px;">
+          <p>Unidades foraneas de viaje o espera de carga:</p>
+          <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px; margin-bottom: 20px;">
             <thead>
-              <tr>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Vehiculo</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Chofer</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Remolque</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Estatus</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Ubicacion</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Velocidad / Motivo detenido</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Cliente</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Lugar</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Link</th>
+              <tr style="background-color: #f2f2f2;">
+                <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
+                <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
+                <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
+                <th style="border: 1px solid #000; padding: 5px;">Estatus</th>
+                <th style="border: 1px solid #000; padding: 5px;">Ubicacion</th>
+                <th style="border: 1px solid #000; padding: 5px;">Vel/Motivo</th>
+                <th style="border: 1px solid #000; padding: 5px;">Cliente</th>
+                <th style="border: 1px solid #000; padding: 5px;">Lugar</th>
+                <th style="border: 1px solid #000; padding: 5px;">Link</th>
               </tr>
             </thead>
-            <tbody>
-              ${filasViajesHTML}
-            </tbody>
+            <tbody>${filasViajesHTML}</tbody>
           </table>
-
-          <p style="margin-bottom: 15px;">Unidades en yarda:</p>
-          
-          <table style="width: 250px; border-collapse: collapse; border: 1px solid #000; font-size: 12px;">
-            <thead>
-              <tr>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Vehiculo</th>
-                <th style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold;">Estatus</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filasYardaHTML}
-            </tbody>
+          <p>Unidades en yarda:</p>
+          <table style="width: 250px; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+            <thead><tr style="background-color: #f2f2f2;"><th style="border: 1px solid #000; padding: 5px;">Vehiculo</th><th style="border: 1px solid #000; padding: 5px;">Estatus</th></tr></thead>
+            <tbody>${filasYardaHTML}</tbody>
           </table>
         </div>
       `;
 
-      const templateParams = {
-        para_correo: correosInternos,
-        subject: `ESTATUS UNIDADES FORANEAS - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-        contenido_tabla: tablaConsolidadaHTML 
-      };
-
-      await emailjs.send(
-        process.env.REACT_APP_EMAILJS_SERVICE_ID,
-        process.env.REACT_APP_EMAILJS_TEMPLATE_ID_CONSOLIDADO || process.env.REACT_APP_EMAILJS_TEMPLATE_ID, 
-        templateParams,
-        process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+      await enviarConBrevo(
+        correosInternos,
+        `ESTATUS UNIDADES FORANEAS - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
+        tablaConsolidadaHTML
       );
 
-      message.success({ content: "Reporte consolidado enviado con éxito", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso: Se envió el reporte completo (Viajes y Yarda) al equipo de Tráfico.", tipo: 'success' });
+      message.success({ content: "Reporte consolidado enviado con Brevo", key: "envioMasivo" });
+      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso vía Brevo.", tipo: 'success' });
     } catch (error) {
-      console.error("Error en envío consolidado:", error);
+      console.error("Error en envío masivo Brevo:", error);
       message.error({ content: "Error al realizar el envío consolidado", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: `Error en Reporte Consolidado: ${error.message || 'Fallo al procesar el HTML'}`, tipo: 'error' });
     }
   };
 
