@@ -507,14 +507,12 @@ function App() {
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
       await guardarSugerenciaAutomatica('lugar', info.lugar);
 
-      // FORMATEO DE FECHA Y HORA (BACKLOGGING)
       const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
       const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
       const fechaFormateada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
       const estatusDelDia = `${fechaFormateada} a las ${horaString}`;
 
-      // GUARDADO EN FIREBASE
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
@@ -525,7 +523,6 @@ function App() {
       };
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
-      // ENVÍO DE CORREO AL CLIENTE (SI APLICA)
       if (info?.enviarACliente && info?.correoEnvio) {
         const contenidoHtmlIndividual = `
           <div style="font-family: Arial, sans-serif; color: #333;">
@@ -595,7 +592,6 @@ function App() {
         await guardarSugerenciaAutomatica('velocidad', info.velocidad);
         await guardarSugerenciaAutomatica('lugar', info.lugar);
 
-        // CAMBIO: Ahora buscamos si está en 'viajes' o en 'espera'
         const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
@@ -619,7 +615,6 @@ function App() {
         `;
       }
 
-      // CAMBIO: Al filtrar la yarda, descartamos a los que están en 'viajes' o en 'espera'
       const unidadesActivasNombres = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera').map(v => v.unidad);
       const unidadesEnYarda = unidades.filter(u => !unidadesActivasNombres.includes(u.nombre));
       
@@ -695,7 +690,6 @@ function App() {
   };
 
   const handleAbrirBitacoraInteligente = () => {
-    // CAMBIO: Ahora jalamos a las unidades que están en 'viajes' y también a las que están en 'espera'
     const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera');
     const nuevasBitacoras = {};
 
@@ -1393,10 +1387,23 @@ function App() {
                   </div>
                 </div>
 
-                {/* AGREGAR PUNTO DE REVISIÓN */}
-                <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                  <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#3b82f6' }}>AGREGAR PUNTO DE REVISIÓN</h3>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                {/* AGREGAR PUNTO DE REVISIÓN - ORGANIZADO EN 2 FILAS */}
+                <div style={{ 
+                  background: 'rgba(59, 130, 246, 0.1)', 
+                  padding: '20px', 
+                  borderRadius: '8px', 
+                  marginBottom: '20px', 
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '15px'
+                }}>
+                  <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#3b82f6', fontWeight: 'bold' }}>
+                    AGREGAR PUNTO DE REVISIÓN
+                  </h3>
+
+                  {/* FILA 1: Tiempo y Lugar */}
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
                     <div style={{ flex: 1 }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Fecha</span>
                       <DatePicker style={{ width: '100%' }} value={datosNuevoPunto.fecha} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, fecha: v})} getPopupContainer={t => t.parentNode} />
@@ -1405,20 +1412,26 @@ function App() {
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Hora</span>
                       <TimePicker style={{ width: '100%' }} format="HH:mm" value={datosNuevoPunto.hora} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, hora: v})} getPopupContainer={t => t.parentNode} />
                     </div>
-                    <div style={{ flex: 2 }}>
+                    <div style={{ flex: 3 }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Ubicación</span>
-                      <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Lugar" />
+                      <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Ciudad, Estado o Punto de control" />
                     </div>
-                    <div style={{ flex: 1 }}>
+                  </div>
+
+                  {/* FILA 2: Estatus, Notas y Acción */}
+                  <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1.5 }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Estatus</span>
-                      <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus" />
+                      <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus del viaje" />
                     </div>
-                    <div style={{ flex: 2 }}>
+                    <div style={{ flex: 3 }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Observaciones</span>
-                      <Input value={datosNuevoPunto.observaciones} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, observaciones: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} />
+                      <Input value={datosNuevoPunto.observaciones} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, observaciones: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} placeholder="Notas adicionales..." />
                     </div>
-                    <div>
-                      <Button type="primary" onClick={handleAgregarPunto} style={{ fontWeight: 'bold' }}>Agregar</Button>
+                    <div style={{ flex: 0.5 }}>
+                      <Button type="primary" onClick={handleAgregarPunto} style={{ fontWeight: 'bold', width: '100%' }}>
+                        Agregar
+                      </Button>
                     </div>
                   </div>
                 </div>
