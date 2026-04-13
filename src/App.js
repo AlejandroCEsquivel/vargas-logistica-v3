@@ -507,6 +507,11 @@ function App() {
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
       await guardarSugerenciaAutomatica('lugar', info.lugar);
 
+      // BUSCAMOS INFO DEL VIAJE PARA RELLENAR CHOFER Y REMOLQUE EN LA TABLA DEL CLIENTE
+      const viajeActivo = viajes.find(v => v.unidad === unidadNombre && (v.estatus === 'viajes' || v.estatus === 'espera'));
+      const chofer = viajeActivo?.chofer || "N/A";
+      const remolque = viajeActivo?.caja || "N/A";
+
       const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
       const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
       const fechaFormateada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
@@ -524,15 +529,39 @@ function App() {
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
       if (info?.enviarACliente && info?.correoEnvio) {
+        // NUEVO FORMATO DE TABLA PARA EL CLIENTE
         const contenidoHtmlIndividual = `
-          <div style="font-family: Arial, sans-serif; color: #333;">
-            <h2 style="color: #164e63;">Estatus Unidad: ${unidadNombre}</h2>
-            <p><b>Estatus del día:</b> ${estatusDelDia}</p>
-            <p><b>Estatus:</b> ${info.estatus || 'N/A'}</p>
-            <p><b>Ubicación:</b> ${info.ubicacion || 'N/A'}</p>
-            <p><b>Velocidad:</b> ${info.velocidad || 'N/A'}</p>
-            <p><b>Lugar:</b> ${info.lugar || 'N/A'}</p>
-            <p><b>Link:</b> <a href="${info.link || '#'}">Ver rastreo</a></p>
+          <div style="font-family: 'Times New Roman', serif; color: #000; font-size: 13px;">
+            <p><b>Reporte de Estatus Individual - Transporte Vargas</b></p>
+            <table border="1" style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
+              <thead>
+                <tr style="background-color: #f2f2f2;">
+                  <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Hora Rep.</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Estatus</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Ubicacion</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Vel/Motivo</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Lugar</th>
+                  <th style="border: 1px solid #000; padding: 5px;">Link</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${unidadNombre}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${horaString}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${info.estatus || ''}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${info.ubicacion || ''}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${info.velocidad || ''}</td>
+                  <td style="border: 1px solid #000; padding: 5px;">${info.lugar || ''}</td>
+                  <td style="border: 1px solid #000; padding: 5px; text-align: center;"><a href="${info.link || '#'}">Ver GPS</a></td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size: 10px; color: #666; margin-top: 15px;">Este es un reporte automático generado por el sistema de monitoreo de Transporte Vargas.</p>
           </div>
         `;
 
@@ -549,7 +578,7 @@ function App() {
           tipo: 'Reporte de Bitácora (Cliente)'
         });
 
-        message.success({ content: `¡Estatus guardado y enviado al cliente!`, key: 'envioInd' });
+        message.success({ content: `¡Estatus enviado al cliente en formato formal!`, key: 'envioInd' });
       } else {
         message.success({ content: `¡Estatus guardado internamente!`, key: 'envioInd' });
       }
