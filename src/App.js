@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert } from 'antd'; 
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import 'antd/dist/reset.css';
@@ -79,7 +79,8 @@ function App() {
     cliente: undefined,
     origen: '',
     destino: '',
-    correoEnvio: '' 
+    correoEnvio: '',
+    enviarACliente: true // <-- NUEVO ESTADO PARA EL CHECKBOX
   });
 
   const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
@@ -90,7 +91,7 @@ function App() {
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // ESTADOS PARA RASTREO ESPECIAL (OPCIÓN A)
+  // ESTADOS PARA RASTREO ESPECIAL
   const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
   const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
   const [puntosRevision, setPuntosRevision] = useState([]);
@@ -278,7 +279,6 @@ function App() {
         fechaFinalizacion: new Date().toISOString() 
       });
 
-      // --- INICIO: OPCIÓN 1 (LA ASPIRADORA REACTIVA) ---
       const viajeTerminado = viajes.find(v => v.id === viajeId);
       if (viajeTerminado) {
         const registroEnEspera = viajes.find(v => v.unidad === viajeTerminado.unidad && v.estatus === 'espera');
@@ -286,7 +286,6 @@ function App() {
           await deleteDoc(doc(db, "viajes", registroEnEspera.id));
         }
       }
-      // --- FIN: OPCIÓN 1 ---
 
       message.success("Viaje finalizado correctamente");
     } catch (e) {
@@ -295,7 +294,6 @@ function App() {
     }
   };
 
-  // NUEVA FUNCIÓN: Eliminar manualmente de "Espera de carga"
   const handleEliminarEspera = async (id) => {
     try {
       await deleteDoc(doc(db, "viajes", id));
@@ -354,20 +352,19 @@ function App() {
       return message.error("Este número de Carta Porte ya está registrado en un viaje activo.");
     }
 
-    if (datosNuevoViaje.correoEnvio && !/\S+@\S+\.\S+/.test(datosNuevoViaje.correoEnvio)) {
+    // Validar formato de correo solo si se seleccionó enviarlo al cliente
+    if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio && !/\S+@\S+\.\S+/.test(datosNuevoViaje.correoEnvio)) {
       return message.error("El formato del correo electrónico no es válido");
     }
 
     setCargandoViaje(true);
 
     try {
-      // --- INICIO: LA ASPIRADORA AL CREAR ---
       // Borramos registro en espera si la unidad ya sale a un nuevo viaje
       const registroEnEspera = viajes.find(v => v.unidad === datosNuevoViaje.unidad && v.estatus === 'espera');
       if (registroEnEspera) {
         await deleteDoc(doc(db, "viajes", registroEnEspera.id));
       }
-      // --- FIN: LA ASPIRADORA AL CREAR ---
 
       await guardarSugerenciaAutomatica('caja', datosNuevoViaje.caja);
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
@@ -384,6 +381,7 @@ function App() {
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
+      // CORREOS INTERNOS (SIEMPRE SE ENVIAN)
       const correosInternos = [
         "t.foraneo@transportesvargas.com",
         "manuel.ochoa@transportesvargas.com",
@@ -398,8 +396,9 @@ function App() {
         "silvia@vargasinterlogistics.com"
       ];
 
+      // LOGICA CONDICIONAL PARA EL CLIENTE
       let listaFinalDestinatarios = [...correosInternos];
-      if (datosNuevoViaje.correoEnvio) {
+      if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio) {
         listaFinalDestinatarios.push(datosNuevoViaje.correoEnvio);
       }
 
@@ -452,7 +451,7 @@ function App() {
       `;
 
       try {
-        const avisoEnvio = message.loading("Enviando notificación de viaje vía Brevo...", 0);
+        const avisoEnvio = message.loading("Procesando creación de viaje...", 0);
 
         await enviarConBrevo(
           destinatariosString,
@@ -467,10 +466,13 @@ function App() {
           destinatarios: destinatariosString,
           unidad: datosNuevoViaje.unidad,
           fechaEnvio: new Date().toISOString(),
-          tipo: 'Creación de Viaje (Notificación Automática Interna via Brevo)'
+          tipo: 'Creación de Viaje (Brevo)'
         });
 
-        message.success("Viaje creado y notificación enviada correctamente");
+        message.success(datosNuevoViaje.enviarACliente 
+          ? "Viaje creado y notificado al cliente" 
+          : "Viaje creado y notificado internamente");
+          
       } catch (mailError) {
         message.destroy();
         console.error("Error al enviar notificación Brevo:", mailError);
@@ -482,7 +484,7 @@ function App() {
       setDatosNuevoViaje({
         fecha: null, cp: '', hora: null, unidad: undefined, 
         chofer: undefined, caja: '', cliente: undefined, 
-        origen: '', destino: '', correoEnvio: ''
+        origen: '', destino: '', correoEnvio: '', enviarACliente: true
       });
       
     } catch (e) {
@@ -496,60 +498,64 @@ function App() {
   const handleEnviarBitacora = async (unidadNombre) => {
     const info = datosBitacora[unidadNombre];
     
-    if (!info?.correoEnvio) {
-      return message.warning("Por favor ingresa un correo de destino");
+    if (info?.enviarACliente && !info?.correoEnvio) {
+      return message.warning("Por favor ingresa un correo para notificar al cliente");
     }
 
     try {
-      message.loading({ content: `Enviando reporte de ${unidadNombre}...`, key: 'envioInd' });
+      message.loading({ content: `Procesando estatus de ${unidadNombre}...`, key: 'envioInd' });
 
       await guardarSugerenciaAutomatica('estatus', info.estatus);
       await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
       await guardarSugerenciaAutomatica('lugar', info.lugar);
 
+      // GUARDADO EN FIREBASE (SIEMPRE SE HACE)
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
         link: info.link || 'No proporcionado',
         fechaEnvio: new Date().toISOString(),
       };
-      
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
 
-      const contenidoHtmlIndividual = `
-        <div style="font-family: Arial, sans-serif; color: #333;">
-          <h2 style="color: #164e63;">Estatus Unidad: ${unidadNombre}</h2>
-          <p><b>Hora Reporte:</b> ${horaString}</p>
-          <p><b>Estatus:</b> ${info.estatus || 'N/A'}</p>
-          <p><b>Ubicación:</b> ${info.ubicacion || 'N/A'}</p>
-          <p><b>Velocidad:</b> ${info.velocidad || 'N/A'}</p>
-          <p><b>Lugar:</b> ${info.lugar || 'N/A'}</p>
-          <p><b>Link:</b> <a href="${info.link || '#'}">Ver rastreo</a></p>
-        </div>
-      `;
+      // ENVÍO DE CORREO (SOLO SI EL CHECKBOX ESTÁ MARCADO)
+      if (info?.enviarACliente && info?.correoEnvio) {
+        const contenidoHtmlIndividual = `
+          <div style="font-family: Arial, sans-serif; color: #333;">
+            <h2 style="color: #164e63;">Estatus Unidad: ${unidadNombre}</h2>
+            <p><b>Hora Reporte:</b> ${horaString}</p>
+            <p><b>Estatus:</b> ${info.estatus || 'N/A'}</p>
+            <p><b>Ubicación:</b> ${info.ubicacion || 'N/A'}</p>
+            <p><b>Velocidad:</b> ${info.velocidad || 'N/A'}</p>
+            <p><b>Lugar:</b> ${info.lugar || 'N/A'}</p>
+            <p><b>Link:</b> <a href="${info.link || '#'}">Ver rastreo</a></p>
+          </div>
+        `;
 
-      await enviarConBrevo(
-        info.correoEnvio,
-        `ESTATUS UNIDAD ${unidadNombre} - ${horaString}`,
-        contenidoHtmlIndividual
-      );
+        await enviarConBrevo(
+          info.correoEnvio,
+          `ESTATUS UNIDAD ${unidadNombre} - ${horaString}`,
+          contenidoHtmlIndividual
+        );
+        
+        await addDoc(collection(db, "logs_envios"), {
+          unidad: unidadNombre,
+          destinatario: info.correoEnvio,
+          fechaEnvio: new Date().toISOString(),
+          tipo: 'Reporte de Bitácora (Cliente)'
+        });
+
+        message.success({ content: `¡Estatus guardado y enviado al cliente!`, key: 'envioInd' });
+      } else {
+        message.success({ content: `¡Estatus guardado internamente!`, key: 'envioInd' });
+      }
       
-      await addDoc(collection(db, "logs_envios"), {
-        unidad: unidadNombre,
-        destinatario: info.correoEnvio,
-        fechaEnvio: new Date().toISOString(),
-        tipo: 'Reporte de Bitácora (Brevo)'
-      });
-
-      message.success({ content: `¡Reporte de ${unidadNombre} enviado!`, key: 'envioInd' });
-      setBannerBitacora({ visible: true, mensaje: `Envío exitoso: El reporte de la unidad ${unidadNombre} fue entregado a Brevo.`, tipo: 'success' });
     } catch (e) {
-      console.error("Error al enviar con Brevo:", e);
-      message.error({ content: `Fallo el envío de ${unidadNombre}`, key: 'envioInd' });
-      setBannerBitacora({ visible: true, mensaje: `Error en el envío (${unidadNombre}): ${e.message}`, tipo: 'error' });
+      console.error("Error al procesar:", e);
+      message.error({ content: `Fallo el proceso de ${unidadNombre}`, key: 'envioInd' });
     }
   };
 
@@ -558,6 +564,7 @@ function App() {
       return message.warning("No hay unidades seleccionadas para enviar.");
     }
 
+    // CORREOS INTERNOS (SIEMPRE SE ENVÍAN)
     const correosInternos = [
       "t.foraneo@transportesvargas.com",
       "manuel.ochoa@transportesvargas.com",
@@ -605,13 +612,6 @@ function App() {
             <td style="border: 1px solid #000; padding: 5px;">${info.link || ''}</td>
           </tr>
         `;
-
-        await addDoc(collection(db, "reportes_bitacora"), {
-          unidad: nombreUnidad,
-          ...info,
-          fechaEnvio: new Date().toISOString(),
-          tipoEnvio: "Consolidado Interno (Brevo)"
-        });
       }
 
       const unidadesActivasNombres = viajes.filter(v => v.estatus === 'viajes').map(v => v.unidad);
@@ -662,7 +662,7 @@ function App() {
         tablaConsolidadaHTML
       );
 
-      message.success({ content: "¡Reporte consolidado enviado exitosamente!", key: "envioMasivo" });
+      message.success({ content: "¡Reporte consolidado enviado exitosamente a internos!", key: "envioMasivo" });
       setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso vía Brevo. El equipo de Tráfico ya recibió la información.", tipo: 'success' });
     } catch (error) {
       console.error("Error en envío masivo Brevo:", error);
@@ -697,7 +697,8 @@ function App() {
       const clienteInfo = clientes.find(c => c.nombre === v.cliente);
       nuevasBitacoras[v.unidad] = {
         cliente: v.cliente,
-        correoEnvio: clienteInfo?.correo || '' // JALAR CORREO SI EXISTE
+        correoEnvio: clienteInfo?.correo || '',
+        enviarACliente: true // <-- CHECKBOX MARCADO POR DEFECTO
       };
     });
 
@@ -771,7 +772,6 @@ function App() {
         timestamp: new Date().getTime()
       });
 
-      // Auto-guardar como sugerencia para futuros reportes
       await guardarSugerenciaAutomatica('ubicacion', datosNuevoPunto.ubicacion);
       await guardarSugerenciaAutomatica('estatus', datosNuevoPunto.estatus);
 
@@ -790,7 +790,6 @@ function App() {
 
     let csvContent = "Fecha,Hora,Ubicacion,Estatus,Observaciones\n";
     puntosRevision.forEach(p => {
-      // Reemplazamos las comas por espacios en observaciones para no romper el formato CSV
       const obsLimpia = p.observaciones ? p.observaciones.replace(/,/g, " ") : "";
       csvContent += `${p.fecha},${p.hora},${p.ubicacion},${p.estatus},${obsLimpia}\n`;
     });
@@ -1027,9 +1026,8 @@ function App() {
           {vistaActual === 'reportes' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
-              {/* Aquí asumimos que "reportes" puede mostrar viajes completos, o bien, usar viajes activos y finalizados para rastrear */}
               <Table 
-                dataSource={viajes} /* Usamos la lista de viajes para el Rastreo Especial, ya que pertenecen a Viajes */
+                dataSource={viajes}
                 columns={columnasReportes} 
                 size="small"
                 rowKey="id"
@@ -1178,13 +1176,26 @@ function App() {
                   </div>
 
                   <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px', border: '1px solid #3b82f6' }}>
-                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#3b82f6', fontWeight: 'bold' }}>Enviar reporte a:</label>
-                    <Input 
-                      placeholder="Correo del destinatario (opcional)" 
-                      value={datosNuevoViaje.correoEnvio} 
-                      onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, correoEnvio: e.target.value})}
-                      style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #3b82f6' }} 
-                    />
+                    <div style={{ marginBottom: '10px' }}>
+                      <Checkbox 
+                        checked={datosNuevoViaje.enviarACliente} 
+                        onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, enviarACliente: e.target.checked})}
+                        style={{ color: '#fff', fontWeight: 'bold' }}
+                      >
+                        Notificar creación de viaje al cliente
+                      </Checkbox>
+                    </div>
+                    {datosNuevoViaje.enviarACliente && (
+                      <>
+                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#3b82f6', fontWeight: 'bold' }}>Correo del cliente:</label>
+                        <Input 
+                          placeholder="Correo del destinatario (opcional)" 
+                          value={datosNuevoViaje.correoEnvio} 
+                          onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, correoEnvio: e.target.value})}
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #3b82f6' }} 
+                        />
+                      </>
+                    )}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
@@ -1270,11 +1281,26 @@ function App() {
                           <SelectInteligente categoria="lugar" value={datosBitacora[nombreUnidad]?.lugar} onChange={val => handleInputBitacora(nombreUnidad, 'lugar', val)} placeholder="Lugar" />
                         </div>
                         <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Link :</label><Input value={datosBitacora[nombreUnidad]?.link || ''} onChange={e => handleInputBitacora(nombreUnidad, 'link', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
+                        
                         <div style={{ marginBottom: '15px', padding: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                            <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#ddd' }}>Enviar reporte a:</label>
-                            <Input placeholder="Correo del destinatario" value={datosBitacora[nombreUnidad]?.correoEnvio || ''} onChange={e => handleInputBitacora(nombreUnidad, 'correoEnvio', e.target.value)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #3b82f6' }} />
+                            <Checkbox 
+                              checked={datosBitacora[nombreUnidad]?.enviarACliente} 
+                              onChange={(e) => handleInputBitacora(nombreUnidad, 'enviarACliente', e.target.checked)}
+                              style={{ color: '#fff', marginBottom: '10px', fontWeight: 'bold' }}
+                            >
+                              Notificar al cliente
+                            </Checkbox>
+
+                            {datosBitacora[nombreUnidad]?.enviarACliente && (
+                              <>
+                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#ddd' }}>Correo del destinatario:</label>
+                                <Input placeholder="Correo del destinatario" value={datosBitacora[nombreUnidad]?.correoEnvio || ''} onChange={e => handleInputBitacora(nombreUnidad, 'correoEnvio', e.target.value)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #3b82f6' }} />
+                              </>
+                            )}
                         </div>
-                        <Button type="primary" block style={{ height: '40px', fontWeight: 'bold' }} onClick={() => handleEnviarBitacora(nombreUnidad)}>Enviar correo a cliente</Button>
+                        <Button type="primary" block style={{ height: '40px', fontWeight: 'bold' }} onClick={() => handleEnviarBitacora(nombreUnidad)}>
+                          {datosBitacora[nombreUnidad]?.enviarACliente ? 'Guardar y Notificar a Cliente' : 'Solo Guardar Estatus'}
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -1283,7 +1309,7 @@ function App() {
 
               <div style={{ position: 'sticky', bottom: '-40px', left: '-40px', right: '-40px', background: '#000', padding: '20px 40px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '15px', zIndex: 10 }}>
                 <Button onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' }); }} style={{ background: '#262626', color: '#fff', border: 'none' }}>Cancelar</Button>
-                <Button type="primary" onClick={handleEnviarBitacoraMasiva} style={{ height: '32px', padding: '0 25px' }}>Enviar</Button>
+                <Button type="primary" onClick={handleEnviarBitacoraMasiva} style={{ height: '32px', padding: '0 25px' }}>Enviar Consolidado a Tráfico</Button>
               </div>
             </div>
           )}
