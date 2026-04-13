@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download } from 'lucide-react';
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download, Search } from 'lucide-react';
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
@@ -81,7 +81,7 @@ function App() {
     destino: '',
     correoEnvio: '',
     enviarACliente: true,
-    sello: '' // <-- CAMBIO: Nuevo estado para capturar el Sello desde el inicio
+    sello: ''
   });
 
   const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
@@ -92,7 +92,7 @@ function App() {
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // ESTADOS PARA RASTREO ESPECIAL (OPCIÓN A)
+  // ESTADOS PARA RASTREO ESPECIAL
   const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
   const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
   const [puntosRevision, setPuntosRevision] = useState([]);
@@ -196,7 +196,6 @@ function App() {
     return () => unsubscribe();
   }, [viajeActivoRastreo]);
 
-  // FUNCIÓN PARA PREPARAR LA EDICIÓN
   const prepararEdicion = (coleccion, record) => {
     setEditandoId(record.id);
     setTipoEdicion(coleccion);
@@ -353,7 +352,6 @@ function App() {
       return message.error("Este número de Carta Porte ya está registrado en un viaje activo.");
     }
 
-    // Validar formato de correo solo si se seleccionó enviarlo al cliente
     if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio && !/\S+@\S+\.\S+/.test(datosNuevoViaje.correoEnvio)) {
       return message.error("El formato del correo electrónico no es válido");
     }
@@ -361,7 +359,6 @@ function App() {
     setCargandoViaje(true);
 
     try {
-      // Borramos registro en espera si la unidad ya sale a un nuevo viaje
       const registroEnEspera = viajes.find(v => v.unidad === datosNuevoViaje.unidad && v.estatus === 'espera');
       if (registroEnEspera) {
         await deleteDoc(doc(db, "viajes", registroEnEspera.id));
@@ -377,13 +374,12 @@ function App() {
         hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
         timestampFiltro: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.valueOf() : new Date().getTime(),
         estatus: 'viajes',
-        sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente', // <-- CAMBIO: Si está vacío, le pone Pendiente
+        sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente',
         fechaCreacion: new Date().toISOString()
       };
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
-      // CORREOS INTERNOS (SIEMPRE SE ENVIAN)
       const correosInternos = [
         "t.foraneo@transportesvargas.com",
         "manuel.ochoa@transportesvargas.com",
@@ -398,7 +394,6 @@ function App() {
         "silvia@vargasinterlogistics.com"
       ];
 
-      // LOGICA CONDICIONAL PARA EL CLIENTE
       let listaFinalDestinatarios = [...correosInternos];
       if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio) {
         listaFinalDestinatarios.push(datosNuevoViaje.correoEnvio);
@@ -512,23 +507,30 @@ function App() {
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
       await guardarSugerenciaAutomatica('lugar', info.lugar);
 
-      // GUARDADO EN FIREBASE (SIEMPRE SE HACE)
+      // FORMATEO DE FECHA Y HORA (BACKLOGGING)
+      const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
+      const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+      const fechaFormateada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
+      const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
+      const estatusDelDia = `${fechaFormateada} a las ${horaString}`;
+
+      // GUARDADO EN FIREBASE
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
+        fechaReporte: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+        horaString: horaString,
         link: info.link || 'No proporcionado',
         fechaEnvio: new Date().toISOString(),
       };
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
-      const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
-
-      // ENVÍO DE CORREO (SOLO SI EL CHECKBOX ESTÁ MARCADO)
+      // ENVÍO DE CORREO AL CLIENTE (SI APLICA)
       if (info?.enviarACliente && info?.correoEnvio) {
         const contenidoHtmlIndividual = `
           <div style="font-family: Arial, sans-serif; color: #333;">
             <h2 style="color: #164e63;">Estatus Unidad: ${unidadNombre}</h2>
-            <p><b>Hora Reporte:</b> ${horaString}</p>
+            <p><b>Estatus del día:</b> ${estatusDelDia}</p>
             <p><b>Estatus:</b> ${info.estatus || 'N/A'}</p>
             <p><b>Ubicación:</b> ${info.ubicacion || 'N/A'}</p>
             <p><b>Velocidad:</b> ${info.velocidad || 'N/A'}</p>
@@ -566,7 +568,6 @@ function App() {
       return message.warning("No hay unidades seleccionadas para enviar.");
     }
 
-    // CORREOS INTERNOS (SIEMPRE SE ENVÍAN)
     const correosInternos = [
       "t.foraneo@transportesvargas.com",
       "manuel.ochoa@transportesvargas.com",
@@ -598,12 +599,13 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
-        const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false});
+        const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
+        const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
 
         filasViajesHTML += `
           <tr>
             <td style="border: 1px solid #000; padding: 5px;">${nombreUnidad}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${horaString}</td>
+            <td style="border: 1px solid #000; padding: 5px;">${fechaCorta} ${horaString}</td>
             <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
             <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>
             <td style="border: 1px solid #000; padding: 5px;">${info.estatus || ''}</td>
@@ -637,7 +639,7 @@ function App() {
             <thead>
               <tr style="background-color: #f2f2f2;">
                 <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
-                <th style="border: 1px solid #000; padding: 5px;">Hora Rep.</th>
+                <th style="border: 1px solid #000; padding: 5px;">Fecha/Hora</th>
                 <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
                 <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
                 <th style="border: 1px solid #000; padding: 5px;">Estatus</th>
@@ -695,12 +697,11 @@ function App() {
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
-      // BUSCAR CORREO DEL CLIENTE AUTOMÁTICAMENTE
       const clienteInfo = clientes.find(c => c.nombre === v.cliente);
       nuevasBitacoras[v.unidad] = {
         cliente: v.cliente,
         correoEnvio: clienteInfo?.correo || '',
-        enviarACliente: true // <-- CHECKBOX MARCADO POR DEFECTO
+        enviarACliente: true
       };
     });
 
@@ -806,7 +807,6 @@ function App() {
     link.click();
     document.body.removeChild(link);
   };
-  // --- FIN FUNCIONES RASTREO ESPECIAL ---
 
   const columnasReportes = [
     { title: 'Unidad', dataIndex: 'unidad', key: 'unidad' },
@@ -1115,7 +1115,6 @@ function App() {
                     />
                   </div>
                   
-                  {/* CAMBIO: INPUT DE SELLO AQUÍ */}
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Sello :</label>
                     <Input 
                       value={datosNuevoViaje.sello} 
@@ -1259,16 +1258,29 @@ function App() {
                     <div key={nombreUnidad} style={{ background: '#1a1a1a', borderRadius: '4px', border: '1px solid #333' }}>
                       <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6' }}>{nombreUnidad}</div>
                       <div style={{ padding: '25px', background: '#164e63', margin: '15px', borderRadius: '4px' }}>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Hora Rep. :</label>
-                          <TimePicker 
-                            style={{ flex: 1 }} 
-                            format="HH:mm" 
-                            value={datosBitacora[nombreUnidad]?.horaReporte} 
-                            onChange={val => handleInputBitacora(nombreUnidad, 'horaReporte', val)} 
-                            getPopupContainer={(trigger) => trigger.parentNode}
-                            placeholder="Hora del GPS"
-                          />
+                        
+                        {/* CAMBIO: DATEPICKER Y TIMEPICKER JUNTOS (BACKLOGGING) */}
+                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
+                          <label style={{ width: '100px' }}>Fecha/Hora :</label>
+                          <div style={{ display: 'flex', gap: '10px', flex: 1 }}>
+                            <DatePicker 
+                              style={{ flex: 1 }} 
+                              value={datosBitacora[nombreUnidad]?.fechaReporte} 
+                              onChange={val => handleInputBitacora(nombreUnidad, 'fechaReporte', val)} 
+                              getPopupContainer={(trigger) => trigger.parentNode}
+                              placeholder="Hoy"
+                            />
+                            <TimePicker 
+                              style={{ flex: 1 }} 
+                              format="HH:mm" 
+                              value={datosBitacora[nombreUnidad]?.horaReporte} 
+                              onChange={val => handleInputBitacora(nombreUnidad, 'horaReporte', val)} 
+                              getPopupContainer={(trigger) => trigger.parentNode}
+                              placeholder="Hora GPS"
+                            />
+                          </div>
                         </div>
+
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Estatus :</label>
                           <SelectInteligente categoria="estatus" value={datosBitacora[nombreUnidad]?.estatus} onChange={val => handleInputBitacora(nombreUnidad, 'estatus', val)} placeholder="Estatus" />
                         </div>
