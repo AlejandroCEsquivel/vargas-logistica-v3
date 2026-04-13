@@ -595,7 +595,8 @@ function App() {
         await guardarSugerenciaAutomatica('velocidad', info.velocidad);
         await guardarSugerenciaAutomatica('lugar', info.lugar);
 
-        const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && v.estatus === 'viajes');
+        // CAMBIO: Ahora buscamos si está en 'viajes' o en 'espera'
+        const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
@@ -618,7 +619,8 @@ function App() {
         `;
       }
 
-      const unidadesActivasNombres = viajes.filter(v => v.estatus === 'viajes').map(v => v.unidad);
+      // CAMBIO: Al filtrar la yarda, descartamos a los que están en 'viajes' o en 'espera'
+      const unidadesActivasNombres = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera').map(v => v.unidad);
       const unidadesEnYarda = unidades.filter(u => !unidadesActivasNombres.includes(u.nombre));
       
       let filasYardaHTML = "";
@@ -693,7 +695,8 @@ function App() {
   };
 
   const handleAbrirBitacoraInteligente = () => {
-    const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes');
+    // CAMBIO: Ahora jalamos a las unidades que están en 'viajes' y también a las que están en 'espera'
+    const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera');
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
@@ -1259,7 +1262,6 @@ function App() {
                       <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6' }}>{nombreUnidad}</div>
                       <div style={{ padding: '25px', background: '#164e63', margin: '15px', borderRadius: '4px' }}>
                         
-                        {/* CAMBIO: DATEPICKER Y TIMEPICKER JUNTOS (BACKLOGGING) */}
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
                           <label style={{ width: '100px' }}>Fecha/Hora :</label>
                           <div style={{ display: 'flex', gap: '10px', flex: 1 }}>
