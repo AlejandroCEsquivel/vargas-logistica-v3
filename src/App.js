@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2 } from 'lucide-react';
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download } from 'lucide-react';
 import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
@@ -90,6 +90,19 @@ function App() {
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
+  // ESTADOS PARA RASTREO ESPECIAL (OPCIÓN A)
+  const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
+  const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
+  const [puntosRevision, setPuntosRevision] = useState([]);
+  const [selloActual, setSelloActual] = useState('');
+  const [datosNuevoPunto, setDatosNuevoPunto] = useState({
+    fecha: null,
+    hora: null,
+    ubicacion: '',
+    estatus: '',
+    observaciones: ''
+  });
+
   const cargarSugerencias = async () => {
     try {
       const snap = await getDocs(collection(db, "sugerencias_menu"));
@@ -170,6 +183,16 @@ function App() {
       unsubReportes();
     };
   }, []); 
+
+  // EFFECT PARA CARGAR LOS PUNTOS DE RASTREO EN TIEMPO REAL
+  useEffect(() => {
+    if (!viajeActivoRastreo || !viajeActivoRastreo.id) return;
+    const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"), orderBy("timestamp", "asc"));
+    const unsubscribe = onSnapshot(qPuntos, (snap) => {
+      setPuntosRevision(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsubscribe();
+  }, [viajeActivoRastreo]);
 
   // FUNCIÓN PARA PREPARAR LA EDICIÓN
   const prepararEdicion = (coleccion, record) => {
@@ -708,6 +731,82 @@ function App() {
     </Select>
   );
 
+  // --- FUNCIONES PARA RASTREO ESPECIAL ---
+  const abrirRastreoEspecial = (viajeRecord) => {
+    setViajeActivoRastreo(viajeRecord);
+    setSelloActual(viajeRecord.sello || 'Pendiente');
+    setMostrarModalRastreo(true);
+  };
+
+  const cerrarRastreoEspecial = () => {
+    setMostrarModalRastreo(false);
+    setViajeActivoRastreo(null);
+    setPuntosRevision([]);
+    setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', observaciones: '' });
+  };
+
+  const handleActualizarSello = async () => {
+    if (!viajeActivoRastreo) return;
+    try {
+      await updateDoc(doc(db, "viajes", viajeActivoRastreo.id), { sello: selloActual });
+      message.success("Sello actualizado correctamente");
+      setViajeActivoRastreo({ ...viajeActivoRastreo, sello: selloActual });
+    } catch (e) {
+      message.error("Error al actualizar el sello");
+    }
+  };
+
+  const handleAgregarPunto = async () => {
+    if (!datosNuevoPunto.fecha || !datosNuevoPunto.hora || !datosNuevoPunto.ubicacion || !datosNuevoPunto.estatus) {
+      return message.warning("Por favor llena Fecha, Hora, Ubicación y Estatus");
+    }
+
+    try {
+      await addDoc(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"), {
+        fecha: datosNuevoPunto.fecha.format('YYYY-MM-DD'),
+        hora: datosNuevoPunto.hora.format('HH:mm'),
+        ubicacion: datosNuevoPunto.ubicacion,
+        estatus: datosNuevoPunto.estatus,
+        observaciones: datosNuevoPunto.observaciones,
+        timestamp: new Date().getTime()
+      });
+
+      // Auto-guardar como sugerencia para futuros reportes
+      await guardarSugerenciaAutomatica('ubicacion', datosNuevoPunto.ubicacion);
+      await guardarSugerenciaAutomatica('estatus', datosNuevoPunto.estatus);
+
+      message.success("Punto de revisión agregado exitosamente");
+      setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', observaciones: '' });
+    } catch (e) {
+      console.error("Error agregando punto:", e);
+      message.error("No se pudo agregar el punto de revisión");
+    }
+  };
+
+  const handleDescargarCSV = () => {
+    if (puntosRevision.length === 0) {
+      return message.warning("No hay puntos registrados para descargar.");
+    }
+
+    let csvContent = "Fecha,Hora,Ubicacion,Estatus,Observaciones\n";
+    puntosRevision.forEach(p => {
+      // Reemplazamos las comas por espacios en observaciones para no romper el formato CSV
+      const obsLimpia = p.observaciones ? p.observaciones.replace(/,/g, " ") : "";
+      csvContent += `${p.fecha},${p.hora},${p.ubicacion},${p.estatus},${obsLimpia}\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Rastreo_Especial_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+  // --- FIN FUNCIONES RASTREO ESPECIAL ---
+
   const columnasReportes = [
     { title: 'Unidad', dataIndex: 'unidad', key: 'unidad' },
     { title: 'Salida', dataIndex: 'salida', key: 'salida' },
@@ -719,8 +818,13 @@ function App() {
     { 
       title: 'Acciones', 
       key: 'acciones',
-      render: () => (
-        <Button danger size="small" style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}>
+      render: (_, record) => (
+        <Button 
+          danger 
+          size="small" 
+          onClick={() => abrirRastreoEspecial(record)}
+          style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}
+        >
           Rastreo especial de viaje
         </Button>
       ) 
@@ -923,8 +1027,9 @@ function App() {
           {vistaActual === 'reportes' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
+              {/* Aquí asumimos que "reportes" puede mostrar viajes completos, o bien, usar viajes activos y finalizados para rastrear */}
               <Table 
-                dataSource={reportes} 
+                dataSource={viajes} /* Usamos la lista de viajes para el Rastreo Especial, ya que pertenecen a Viajes */
                 columns={columnasReportes} 
                 size="small"
                 rowKey="id"
@@ -983,6 +1088,7 @@ function App() {
             </div>
           )}
 
+          {/* MODAL NUEVO VIAJE */}
           {mostrarModalNuevoViaje && (
             <div id="area-modal-nuevo-viaje" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
               <div style={{ width: '500px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -1090,6 +1196,7 @@ function App() {
             </div>
           )}
 
+          {/* MODAL CAPTURAR BITACORA MASIVA */}
           {mostrarModalBitacora && (
             <div id="area-modal-bitacora" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, padding: '40px', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1181,6 +1288,7 @@ function App() {
             </div>
           )}
 
+          {/* MODAL DESHABILITAR UNIDAD */}
           <Modal
             title={`Deshabilitar Unidad: ${unidadAfectada?.nombre}`}
             open={mostrarModalMotivo}
@@ -1201,6 +1309,99 @@ function App() {
               </Radio.Group>
             </div>
           </Modal>
+
+          {/* MODAL RASTREO ESPECIAL */}
+          {mostrarModalRastreo && viajeActivoRastreo && (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, padding: '20px' }}>
+              <div style={{ width: '1000px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '25px', maxHeight: '95vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
+                  <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6' }}>Rastreo Especial de Viaje</span>
+                  <X onClick={cerrarRastreoEspecial} style={{ cursor: 'pointer', color: '#888' }} size={24} />
+                </div>
+
+                {/* DETALLES DEL VIAJE */}
+                <div style={{ background: '#262626', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
+                  <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#aaa' }}>DETALLES DEL VIAJE</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '13px' }}>
+                    <div><span style={{ color: '#888' }}>Tractor:</span> <br/><b>{viajeActivoRastreo.unidad}</b></div>
+                    <div><span style={{ color: '#888' }}>Remolque:</span> <br/><b>{viajeActivoRastreo.caja || 'N/A'}</b></div>
+                    <div><span style={{ color: '#888' }}>Chofer:</span> <br/><b>{viajeActivoRastreo.chofer}</b></div>
+                    <div><span style={{ color: '#888' }}>Cliente:</span> <br/><b>{viajeActivoRastreo.cliente}</b></div>
+                    <div><span style={{ color: '#888' }}>Origen:</span> <br/><b>{viajeActivoRastreo.origen}</b></div>
+                    <div><span style={{ color: '#888' }}>Destino:</span> <br/><b>{viajeActivoRastreo.destino}</b></div>
+                    <div><span style={{ color: '#888' }}>Carta Porte:</span> <br/><b>{viajeActivoRastreo.cp}</b></div>
+                    <div>
+                      <span style={{ color: '#888' }}>Sello:</span> <br/>
+                      <div style={{ display: 'flex', gap: '5px', marginTop: '2px' }}>
+                        <Input size="small" value={selloActual} onChange={e => setSelloActual(e.target.value)} style={{ width: '100px', background: '#000', color: '#fff', border: '1px solid #444' }} />
+                        <Button size="small" type="primary" onClick={handleActualizarSello}>Guardar</Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AGREGAR PUNTO DE REVISIÓN */}
+                <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '15px', borderRadius: '6px', marginBottom: '20px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                  <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#3b82f6' }}>AGREGAR PUNTO DE REVISIÓN</h3>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Fecha</span>
+                      <DatePicker style={{ width: '100%' }} value={datosNuevoPunto.fecha} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, fecha: v})} getPopupContainer={t => t.parentNode} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Hora</span>
+                      <TimePicker style={{ width: '100%' }} format="HH:mm" value={datosNuevoPunto.hora} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, hora: v})} getPopupContainer={t => t.parentNode} />
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Ubicación</span>
+                      <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Lugar" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Estatus</span>
+                      <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus" />
+                    </div>
+                    <div style={{ flex: 2 }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Observaciones</span>
+                      <Input value={datosNuevoPunto.observaciones} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, observaciones: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} />
+                    </div>
+                    <div>
+                      <Button type="primary" onClick={handleAgregarPunto} style={{ fontWeight: 'bold' }}>Agregar</Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TABLA DE HISTORIAL DE PUNTOS */}
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                  <Table 
+                    dataSource={puntosRevision}
+                    rowKey="id"
+                    size="small"
+                    pagination={false}
+                    locale={{ emptyText: <Empty description="Aún no hay puntos de revisión para este viaje." /> }}
+                    columns={[
+                      { title: 'Fecha', dataIndex: 'fecha', key: 'fecha', width: 100 },
+                      { title: 'Hora', dataIndex: 'hora', key: 'hora', width: 80 },
+                      { title: 'Ubicación', dataIndex: 'ubicacion', key: 'ubicacion' },
+                      { title: 'Estatus', dataIndex: 'estatus', key: 'estatus' },
+                      { title: 'Observaciones', dataIndex: 'observaciones', key: 'observaciones' }
+                    ]}
+                  />
+                </div>
+
+                {/* BOTONES FINALES */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '15px', borderTop: '1px solid #333', paddingTop: '15px' }}>
+                  <Button icon={<Download size={16} />} style={{ backgroundColor: '#107c41', color: 'white', border: 'none' }} onClick={handleDescargarCSV}>
+                    Descargar Excel (.csv)
+                  </Button>
+                  <Button onClick={cerrarRastreoEspecial} style={{ background: '#262626', color: '#fff', border: 'none' }}>
+                    Cerrar
+                  </Button>
+                </div>
+
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
