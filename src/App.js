@@ -80,7 +80,8 @@ function App() {
     origen: '',
     destino: '',
     correoEnvio: '',
-    enviarACliente: true // <-- NUEVO ESTADO PARA EL CHECKBOX
+    enviarACliente: true,
+    sello: '' // <-- CAMBIO: Nuevo estado para capturar el Sello desde el inicio
   });
 
   const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
@@ -91,7 +92,7 @@ function App() {
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // ESTADOS PARA RASTREO ESPECIAL
+  // ESTADOS PARA RASTREO ESPECIAL (OPCIÓN A)
   const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
   const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
   const [puntosRevision, setPuntosRevision] = useState([]);
@@ -376,6 +377,7 @@ function App() {
         hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
         timestampFiltro: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.valueOf() : new Date().getTime(),
         estatus: 'viajes',
+        sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente', // <-- CAMBIO: Si está vacío, le pone Pendiente
         fechaCreacion: new Date().toISOString()
       };
 
@@ -443,7 +445,7 @@ function App() {
               </tr>
               <tr>
                 <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
-                <td style="border: 1px solid #000; padding: 5px;">Pendiente</td>
+                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.sello}</td>
               </tr>
             </tbody>
           </table>
@@ -484,7 +486,7 @@ function App() {
       setDatosNuevoViaje({
         fecha: null, cp: '', hora: null, unidad: undefined, 
         chofer: undefined, caja: '', cliente: undefined, 
-        origen: '', destino: '', correoEnvio: '', enviarACliente: true
+        origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: ''
       });
       
     } catch (e) {
@@ -1112,6 +1114,17 @@ function App() {
                       style={{ flex: 1, background: '#262626', border: '1px solid #444' }} 
                     />
                   </div>
+                  
+                  {/* CAMBIO: INPUT DE SELLO AQUÍ */}
+                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Sello :</label>
+                    <Input 
+                      value={datosNuevoViaje.sello} 
+                      onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, sello: e.target.value})} 
+                      style={{ flex: 1, background: '#262626', border: '1px solid #444' }} 
+                      placeholder="Opcional"
+                    />
+                  </div>
+
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Hora de salida :</label>
                     <TimePicker 
                       status={!datosNuevoViaje.hora && "error"}
@@ -1269,7 +1282,6 @@ function App() {
                           <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} 
                             onChange={val => {
                                 handleInputBitacora(nombreUnidad, 'cliente', val);
-                                // ACTUALIZAR CORREO SI CAMBIA CLIENTE EN BITACORA
                                 const clienteInfo = clientes.find(c => c.nombre === val);
                                 handleInputBitacora(nombreUnidad, 'correoEnvio', clienteInfo?.correo || '');
                             }} 
