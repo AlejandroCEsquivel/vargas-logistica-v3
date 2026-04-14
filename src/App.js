@@ -739,7 +739,7 @@ function App() {
   const SelectInteligente = ({ categoria, value, onChange, placeholder }) => (
     <Select
       mode="tags"
-      style={{ flex: 1 }}
+      style={{ width: '100%' }}
       placeholder={placeholder}
       value={value ? [value] : []}
       onChange={(vals) => onChange(vals[vals.length - 1] || '')}
@@ -1441,7 +1441,7 @@ function App() {
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Hora</span>
                       <TimePicker style={{ width: '100%' }} format="HH:mm" value={datosNuevoPunto.hora} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, hora: v})} getPopupContainer={t => t.parentNode} />
                     </div>
-                    <div style={{ flex: 3 }}>
+                    <div style={{ flex: 3, minWidth: '0' }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Ubicación</span>
                       <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Ciudad, Estado o Punto de control" />
                     </div>
@@ -1449,7 +1449,7 @@ function App() {
 
                   {/* FILA 2: Estatus, Notas y Acción */}
                   <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1.5 }}>
+                    <div style={{ flex: 1.5, minWidth: '0' }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Estatus</span>
                       <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus del viaje" />
                     </div>
