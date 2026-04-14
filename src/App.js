@@ -8,31 +8,28 @@ import 'antd/dist/reset.css';
 const { Option } = Select;
 const { Panel } = Collapse;
 
-// FUNCIÓN HELPER PARA BREVO (REEMPLAZA A EMAILJS)
+// FUNCIÓN ACTUALIZADA: ENVÍA LOS DATOS A TU SERVIDOR LOCAL EN LUGAR DE BREVO
 const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
-  const listaDestinatarios = destinatarios.split(',').map(email => ({ email: email.trim() }));
-  
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'accept': 'application/json',
-      'api-key': process.env.REACT_APP_BREVO_API_KEY,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender: { 
-        name: process.env.REACT_APP_BREVO_SENDER_NAME, 
-        email: process.env.REACT_APP_BREVO_SENDER_EMAIL 
+  try {
+    const response = await fetch('http://localhost:5000/api/send-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      to: listaDestinatarios,
-      subject: asunto,
-      htmlContent: contenidoHtml
-    })
-  });
+      body: JSON.stringify({
+        to: destinatarios, // Nodemailer acepta directamente el string separado por comas
+        subject: asunto,
+        html: contenidoHtml
+      })
+    });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || 'Error en el envío con Brevo');
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Error en el envío con el servidor local');
+    }
+  } catch (error) {
+    console.error("Error conectando al servidor local:", error);
+    throw error;
   }
 };
 
@@ -1236,7 +1233,7 @@ function App() {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                  <div style={{ display: 'flex', justify-content: 'flex-end', gap: '12px', marginTop: '10px' }}>
                     <Button onClick={() => setMostrarModalNuevoViaje(false)} disabled={cargandoViaje} style={{ background: '#262626', color: '#fff' }}>Cancelar</Button>
                     <Button type="primary" onClick={handleCrearViaje} loading={cargandoViaje}>Crear viaje</Button>
                   </div>
