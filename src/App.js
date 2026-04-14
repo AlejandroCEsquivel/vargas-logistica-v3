@@ -1233,7 +1233,7 @@ function App() {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', justify-content: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
                     <Button onClick={() => setMostrarModalNuevoViaje(false)} disabled={cargandoViaje} style={{ background: '#262626', color: '#fff' }}>Cancelar</Button>
                     <Button type="primary" onClick={handleCrearViaje} loading={cargandoViaje}>Crear viaje</Button>
                   </div>
