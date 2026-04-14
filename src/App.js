@@ -8,10 +8,10 @@ import 'antd/dist/reset.css';
 const { Option } = Select;
 const { Panel } = Collapse;
 
-// FUNCIÓN ACTUALIZADA: ENVÍA LOS DATOS A TU SERVIDOR LOCAL EN LUGAR DE BREVO
+// FUNCIÓN ACTUALIZADA: ENVÍA LOS DATOS A TU SERVIDOR EN RENDER
 const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
   try {
-    const response = await fetch('http://localhost:5000/api/send-email', {
+    const response = await fetch('https://vargas-logistica-v3.onrender.com/api/send-email', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
