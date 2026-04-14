@@ -7,20 +7,18 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json()); // Para poder leer el cuerpo (body) de las peticiones JSON
+app.use(express.json());
 
-// Configuración del "Cartero" (Nodemailer) usando tu .env
+// Configuración optimizada para Gmail
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: process.env.SMTP_PORT,
-    secure: true, // true para puerto 465, false para otros
+    service: 'gmail', // Al usar 'gmail', Nodemailer ya sabe los puertos y hosts correctos
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
 });
 
-// Verificar que la conexión con Gmail sea correcta al iniciar
+// Verificar conexión
 transporter.verify((error, success) => {
     if (error) {
         console.log("❌ Error en la configuración de correo:", error);
@@ -29,7 +27,7 @@ transporter.verify((error, success) => {
     }
 });
 
-// Ruta principal para recibir los datos del viaje desde React
+// Ruta para enviar el correo
 app.post('/api/send-email', async (req, res) => {
     const { to, subject, html } = req.body;
 
@@ -37,7 +35,7 @@ app.post('/api/send-email', async (req, res) => {
         from: `"Transportes Vargas" <${process.env.SMTP_USER}>`,
         to: to,
         subject: subject,
-        html: html, // Aquí llegará todo el diseño que ya tienes en React
+        html: html,
     };
 
     try {
@@ -45,11 +43,10 @@ app.post('/api/send-email', async (req, res) => {
         res.status(200).json({ message: 'Correo enviado con éxito' });
     } catch (error) {
         console.error("Error al enviar correo:", error);
-        res.status(500).json({ error: 'No se pudo enviar el correo' });
+        res.status(500).json({ error: 'No se pudo enviar el correo', details: error.message });
     }
 });
 
-// Iniciar el servidor
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor backend corriendo en el puerto ${PORT}`);
