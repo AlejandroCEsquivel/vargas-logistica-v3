@@ -25,10 +25,10 @@ const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error || 'Error en el envío con el servidor local');
+      throw new Error(errorData.error || 'Error en el envío con el servidor');
     }
   } catch (error) {
-    console.error("Error conectando al servidor local:", error);
+    console.error("Error conectando al servidor:", error);
     throw error;
   }
 };
