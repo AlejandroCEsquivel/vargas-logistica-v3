@@ -33,6 +33,52 @@ const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
   }
 };
 
+// NUEVO COMPONENTE: LÍNEA DE TIEMPO EXPANDIBLE
+const HistorialViaje = ({ viaje }) => {
+  const [puntos, setPuntos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = query(collection(db, "viajes", viaje.id, "puntos_revision"), orderBy("timestamp", "asc"));
+    const unsub = onSnapshot(q, (snap) => {
+      setPuntos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [viaje.id]);
+
+  return (
+    <div style={{ padding: '15px 25px', background: '#0a0a0a', border: '1px solid #333', borderRadius: '6px', margin: '10px 0' }}>
+      <div style={{ marginBottom: '15px', color: '#4ade80', fontSize: '14px' }}>
+        🚀 <b>Inicio de viaje:</b> {viaje.fechaInicioExacta ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}
+      </div>
+      <Table
+        dataSource={puntos}
+        rowKey="id"
+        size="small"
+        pagination={false}
+        loading={loading}
+        columns={[
+          { title: 'Fecha', dataIndex: 'fecha', width: 90 },
+          { title: 'Hora', dataIndex: 'hora', width: 70 },
+          { title: 'Ubicación', dataIndex: 'ubicacion' },
+          { title: 'Estatus', dataIndex: 'estatus' },
+          { title: 'Velocidad', dataIndex: 'velocidad' },
+          { title: 'Lugar', dataIndex: 'lugar' },
+          { title: 'Observaciones', dataIndex: 'observaciones' },
+          { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Ver Mapa</a> : '-' }
+        ]}
+        locale={{ emptyText: <Empty description="No hay eventos registrados aún en la bitácora." imageStyle={{height: 40}} /> }}
+      />
+      {viaje.fechaFinExacta && (
+        <div style={{ marginTop: '15px', color: '#f87171', fontSize: '14px' }}>
+          🏁 <b>Viaje finalizado:</b> {new Date(viaje.fechaFinExacta).toLocaleString('es-MX')}
+        </div>
+      )}
+    </div>
+  );
+};
+
 function App() {
   const [vistaActual, setVistaActual] = useState('inicio');
   const [pestañaActiva, setPestañaActiva] = useState('viajes');
@@ -273,7 +319,8 @@ function App() {
       const viajeRef = doc(db, "viajes", viajeId);
       await updateDoc(viajeRef, { 
         estatus: 'finalizado',
-        fechaFinalizacion: new Date().toISOString() 
+        fechaFinalizacion: new Date().toISOString(),
+        fechaFinExacta: new Date().toISOString() // NUEVO: MARCA DE FIN
       });
 
       const viajeTerminado = viajes.find(v => v.id === viajeId);
@@ -372,7 +419,8 @@ function App() {
         timestampFiltro: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.valueOf() : new Date().getTime(),
         estatus: 'viajes',
         sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente',
-        fechaCreacion: new Date().toISOString()
+        fechaCreacion: new Date().toISOString(),
+        fechaInicioExacta: new Date().toISOString() // NUEVO: MARCA DE INICIO
       };
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
@@ -515,6 +563,22 @@ function App() {
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
       const estatusDelDia = `${fechaFormateada} a las ${horaString}`;
 
+      // NUEVO: INYECCIÓN AUTOMÁTICA A LA CAJA NEGRA (PUNTOS DE REVISIÓN)
+      if (viajeActivo) {
+        await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
+          fecha: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+          hora: horaString,
+          ubicacion: info.ubicacion || '',
+          estatus: info.estatus || '',
+          velocidad: info.velocidad || '',
+          cliente: info.cliente || '',
+          lugar: info.lugar || '',
+          link: info.link || '',
+          observaciones: 'Reporte automático de bitácora',
+          timestamp: new Date().getTime()
+        });
+      }
+
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
@@ -624,6 +688,22 @@ function App() {
 
         const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
         const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
+
+        // NUEVO: INYECCIÓN AUTOMÁTICA MASIVA A LA CAJA NEGRA
+        if (viajeActivo) {
+          await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
+            fecha: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+            hora: horaString,
+            ubicacion: info.ubicacion || '',
+            estatus: info.estatus || '',
+            velocidad: info.velocidad || '',
+            cliente: info.cliente || '',
+            lugar: info.lugar || '',
+            link: info.link || '',
+            observaciones: 'Reporte consolidado automático',
+            timestamp: new Date().getTime()
+          });
+        }
 
         filasViajesHTML += `
           <tr>
@@ -794,6 +874,9 @@ function App() {
         hora: datosNuevoPunto.hora.format('HH:mm'),
         ubicacion: datosNuevoPunto.ubicacion,
         estatus: datosNuevoPunto.estatus,
+        velocidad: '', // Compatibilidad con inyección auto
+        lugar: '',     // Compatibilidad con inyección auto
+        link: '',      // Compatibilidad con inyección auto
         observaciones: datosNuevoPunto.observaciones,
         timestamp: new Date().getTime()
       });
@@ -809,22 +892,30 @@ function App() {
     }
   };
 
+  // NUEVO: DESCARGA DE EXCEL ACTUALIZADA CON HISTORIAL COMPLETO Y FECHAS
   const handleDescargarCSV = () => {
     if (puntosRevision.length === 0) {
       return message.warning("No hay puntos registrados para descargar.");
     }
 
-    let csvContent = "Fecha,Hora,Ubicacion,Estatus,Observaciones\n";
+    let csvContent = `Viaje Unidad: ${viajeActivoRastreo.unidad} | Carta Porte: ${viajeActivoRastreo.cp}\n`;
+    csvContent += `Inicio: ${viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}\n`;
+    csvContent += `Fin: ${viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleString('es-MX') : 'Aun en transito'}\n\n`;
+    csvContent += "Fecha,Hora,Ubicacion,Estatus,Velocidad,Lugar,Link,Observaciones\n";
+    
     puntosRevision.forEach(p => {
       const obsLimpia = p.observaciones ? p.observaciones.replace(/,/g, " ") : "";
-      csvContent += `${p.fecha},${p.hora},${p.ubicacion},${p.estatus},${obsLimpia}\n`;
+      const vel = p.velocidad ? p.velocidad.replace(/,/g, " ") : "";
+      const lug = p.lugar ? p.lugar.replace(/,/g, " ") : "";
+      const lnk = p.link ? p.link.replace(/,/g, " ") : "";
+      csvContent += `${p.fecha},${p.hora},${p.ubicacion},${p.estatus},${vel},${lug},${lnk},${obsLimpia}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Rastreo_Especial_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.csv`);
+    link.setAttribute("download", `Historial_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -903,6 +994,7 @@ function App() {
                   <Table 
                     dataSource={obtenerDatosTabla()} 
                     rowKey="id"
+                    expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} // NUEVO: FILA EXPANDIBLE
                     columns={[
                       { 
                         title: 'Acciones', 
@@ -1030,6 +1122,7 @@ function App() {
               <Table 
                 dataSource={viajes.filter(v => v.estatus === 'finalizado')} 
                 rowKey="id"
+                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} // NUEVO: FILA EXPANDIBLE
                 columns={[
                   { title: 'Fecha', dataIndex: 'fecha' }, 
                   { title: 'Carta porte', dataIndex: 'cp' }, 
@@ -1054,6 +1147,7 @@ function App() {
               <Table 
                 dataSource={viajes}
                 columns={columnasReportes} 
+                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} // NUEVO: FILA EXPANDIBLE
                 size="small"
                 rowKey="id"
                 pagination={{ pageSize: 10 }}
