@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download, Search } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox } from 'antd'; 
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download, Search, Edit3, Check } from 'lucide-react';
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox, Space } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import dayjs from 'dayjs'; // Importante para la edición de fechas
 import 'antd/dist/reset.css';
 
 const { Option } = Select;
@@ -33,10 +34,12 @@ const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
   }
 };
 
-// NUEVO COMPONENTE: LÍNEA DE TIEMPO EXPANDIBLE
+// NUEVO COMPONENTE: LÍNEA DE TIEMPO EXPANDIBLE CON EDICIÓN
 const HistorialViaje = ({ viaje }) => {
   const [puntos, setPuntos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editandoTiempo, setEditandoTiempo] = useState(null); // 'inicio' o 'fin'
+  const [nuevoValor, setNuevoValor] = useState(null);
 
   useEffect(() => {
     const q = query(collection(db, "viajes", viaje.id, "puntos_revision"), orderBy("timestamp", "asc"));
@@ -47,11 +50,39 @@ const HistorialViaje = ({ viaje }) => {
     return () => unsub();
   }, [viaje.id]);
 
+  const guardarCambioTiempo = async () => {
+    if (!nuevoValor) return setEditandoTiempo(null);
+    try {
+      const campo = editandoTiempo === 'inicio' ? 'fechaInicioExacta' : 'fechaFinExacta';
+      await updateDoc(doc(db, "viajes", viaje.id), {
+        [campo]: nuevoValor.toISOString()
+      });
+      message.success("Tiempo actualizado correctamente");
+      setEditandoTiempo(null);
+    } catch (e) {
+      message.error("No se pudo actualizar el tiempo");
+    }
+  };
+
   return (
-    <div style={{ padding: '15px 25px', background: '#0a0a0a', border: '1px solid #333', borderRadius: '6px', margin: '10px 0' }}>
-      <div style={{ marginBottom: '15px', color: '#4ade80', fontSize: '14px' }}>
-        🚀 <b>Inicio de viaje:</b> {viaje.fechaInicioExacta ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}
+    <div style={{ padding: '20px 30px', background: '#0a0a0a', border: '1px solid #333', borderRadius: '8px', margin: '10px 0' }}>
+      
+      {/* SECCIÓN DE INICIO DE VIAJE */}
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px', color: '#4ade80' }}>
+        <div style={{ flex: 1, fontSize: '15px' }}>
+          🚀 <b>Inicio de viaje:</b> {viaje.fechaInicioExacta ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}
+        </div>
+        {editandoTiempo === 'inicio' ? (
+          <Space>
+            <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" placeholder="Selecciona fecha y hora" />
+            <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo} />
+            <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
+          </Space>
+        ) : (
+          <Button size="small" ghost icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('inicio'); setNuevoValor(viaje.fechaInicioExacta ? dayjs(viaje.fechaInicioExacta) : null); }}>Editar</Button>
+        )}
       </div>
+
       <Table
         dataSource={puntos}
         rowKey="id"
@@ -70,9 +101,22 @@ const HistorialViaje = ({ viaje }) => {
         ]}
         locale={{ emptyText: <Empty description="No hay eventos registrados aún en la bitácora." imageStyle={{height: 40}} /> }}
       />
-      {viaje.fechaFinExacta && (
-        <div style={{ marginTop: '15px', color: '#f87171', fontSize: '14px' }}>
-          🏁 <b>Viaje finalizado:</b> {new Date(viaje.fechaFinExacta).toLocaleString('es-MX')}
+
+      {/* SECCIÓN DE FIN DE VIAJE */}
+      {(viaje.estatus === 'finalizado' || viaje.fechaFinExacta) && (
+        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '15px', color: '#f87171' }}>
+          <div style={{ flex: 1, fontSize: '15px' }}>
+            🏁 <b>Viaje finalizado:</b> {viaje.fechaFinExacta ? new Date(viaje.fechaFinExacta).toLocaleString('es-MX') : 'Pendiente de cierre'}
+          </div>
+          {editandoTiempo === 'fin' ? (
+            <Space>
+              <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" />
+              <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo} />
+              <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
+            </Space>
+          ) : (
+            <Button size="small" ghost icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('fin'); setNuevoValor(viaje.fechaFinExacta ? dayjs(viaje.fechaFinExacta) : null); }}>Editar</Button>
+          )}
         </div>
       )}
     </div>
