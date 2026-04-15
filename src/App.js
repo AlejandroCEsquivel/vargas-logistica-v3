@@ -34,7 +34,7 @@ const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
   }
 };
 
-// NUEVO COMPONENTE: LÍNEA DE TIEMPO EXPANDIBLE CON EDICIÓN
+// NUEVO COMPONENTE: LÍNEA DE TIEMPO EXPANDIBLE CON EDICIÓN (VISUALIDAD CORREGIDA)
 const HistorialViaje = ({ viaje }) => {
   const [puntos, setPuntos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,22 +65,26 @@ const HistorialViaje = ({ viaje }) => {
   };
 
   return (
-    <div style={{ padding: '20px 30px', background: '#0a0a0a', border: '1px solid #333', borderRadius: '8px', margin: '10px 0' }}>
+    <div style={{ padding: '20px 30px', background: '#141414', border: '1px solid #333', borderRadius: '8px', margin: '10px 0' }}>
       
       {/* SECCIÓN DE INICIO DE VIAJE */}
-      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '15px', color: '#4ade80' }}>
-        <div style={{ flex: 1, fontSize: '15px' }}>
+      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(74, 222, 128, 0.1)', padding: '10px', borderRadius: '6px' }}>
+        <div style={{ fontSize: '15px', color: '#4ade80' }}>
           🚀 <b>Inicio de viaje:</b> {viaje.fechaInicioExacta ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}
         </div>
-        {editandoTiempo === 'inicio' ? (
-          <Space>
-            <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" placeholder="Selecciona fecha y hora" />
-            <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo} />
-            <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
-          </Space>
-        ) : (
-          <Button size="small" ghost icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('inicio'); setNuevoValor(viaje.fechaInicioExacta ? dayjs(viaje.fechaInicioExacta) : null); }}>Editar</Button>
-        )}
+        <div>
+          {editandoTiempo === 'inicio' ? (
+            <Space>
+              <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" placeholder="Selecciona fecha y hora" style={{ width: '200px' }}/>
+              <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo}>Guardar</Button>
+              <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
+            </Space>
+          ) : (
+            <Button size="small" type="default" icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('inicio'); setNuevoValor(viaje.fechaInicioExacta ? dayjs(viaje.fechaInicioExacta) : null); }}>
+              Editar Inicio
+            </Button>
+          )}
+        </div>
       </div>
 
       <Table
@@ -97,26 +101,30 @@ const HistorialViaje = ({ viaje }) => {
           { title: 'Velocidad', dataIndex: 'velocidad' },
           { title: 'Lugar', dataIndex: 'lugar' },
           { title: 'Observaciones', dataIndex: 'observaciones' },
-          { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Ver Mapa</a> : '-' }
+          { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Mapa</a> : '-' }
         ]}
-        locale={{ emptyText: <Empty description="No hay eventos registrados aún en la bitácora." imageStyle={{height: 40}} /> }}
+        locale={{ emptyText: <Empty description="Sin movimientos en bitácora" /> }}
       />
 
       {/* SECCIÓN DE FIN DE VIAJE */}
       {(viaje.estatus === 'finalizado' || viaje.fechaFinExacta) && (
-        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '15px', color: '#f87171' }}>
-          <div style={{ flex: 1, fontSize: '15px' }}>
+        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(248, 113, 113, 0.1)', padding: '10px', borderRadius: '6px' }}>
+          <div style={{ fontSize: '15px', color: '#f87171' }}>
             🏁 <b>Viaje finalizado:</b> {viaje.fechaFinExacta ? new Date(viaje.fechaFinExacta).toLocaleString('es-MX') : 'Pendiente de cierre'}
           </div>
-          {editandoTiempo === 'fin' ? (
-            <Space>
-              <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" />
-              <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo} />
-              <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
-            </Space>
-          ) : (
-            <Button size="small" ghost icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('fin'); setNuevoValor(viaje.fechaFinExacta ? dayjs(viaje.fechaFinExacta) : null); }}>Editar</Button>
-          )}
+          <div>
+            {editandoTiempo === 'fin' ? (
+              <Space>
+                <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" style={{ width: '200px' }}/>
+                <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo}>Guardar</Button>
+                <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
+              </Space>
+            ) : (
+              <Button size="small" type="default" danger icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('fin'); setNuevoValor(viaje.fechaFinExacta ? dayjs(viaje.fechaFinExacta) : null); }}>
+                Editar Fin
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </div>
