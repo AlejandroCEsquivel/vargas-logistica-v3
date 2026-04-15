@@ -6,6 +6,10 @@ import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy,
 import dayjs from 'dayjs'; // Importante para la edición de fechas
 import 'antd/dist/reset.css';
 
+// NUEVAS IMPORTACIONES PARA EXCEL PROFESIONAL
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+
 const { Option } = Select;
 const { Panel } = Collapse;
 const { RangePicker } = DatePicker; // NUEVO: Extraemos RangePicker para los filtros
@@ -948,7 +952,7 @@ function App() {
         estatus: datosNuevoPunto.estatus,
         velocidad: datosNuevoPunto.velocidad || '', 
         lugar: datosNuevoPunto.lugar || '',         
-        link: datosNuevoPunto.link || '',           
+        link: datosNuevoPunto.link || '',            
         observaciones: datosNuevoPunto.observaciones,
         timestamp: new Date().getTime()
       });
@@ -964,63 +968,117 @@ function App() {
     }
   };
 
-  // NUEVO: DESCARGA DE EXCEL ADAPTADA A LA PLANTILLA Y CONFIGURACIÓN REGIONAL
-  const handleDescargarCSV = () => {
+  // -------------------------------------------------------------------------
+  // NUEVA FUNCIÓN: DESCARGA DE EXCEL CON FORMATO OFICIAL SEG-T03 (ExcelJS)
+  // -------------------------------------------------------------------------
+  const handleDescargarExcel = async () => {
     if (puntosRevision.length === 0) {
       return message.warning("No hay puntos registrados para descargar.");
     }
 
-    // Mini-función para escapar comas en CSV
-    const esc = (val) => {
-      if (!val) return '';
-      const str = String(val);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Rastreo');
 
-    const fechaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleDateString('es-MX') : '';
-    const horaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : '';
-    const fechaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleDateString('es-MX') : '';
-    const horaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : 'En tránsito';
+      // 1. Configurar anchos de columna para que se vea como plantilla oficial
+      worksheet.columns = [
+        { width: 18 }, // A: Fecha y Hora
+        { width: 40 }, // B: Ubicacion / Lugar
+        { width: 18 }, // C: Estatus
+        { width: 18 }, // D: Velocidad
+        { width: 45 }, // E: Observaciones
+        { width: 15 }  // F: Link GPS
+      ];
 
-    // BOM para UTF-8 en Excel
-    let csvContent = '\uFEFF'; 
-    
-    // TRUCO MÁGICO PARA EXCEL LATAM (Fuerza a leer comas como separador)
-    csvContent += "sep=,\n"; 
+      // Tiempos extraídos de tu lógica
+      const fechaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleDateString('es-MX') : '';
+      const horaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : '';
+      const fechaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleDateString('es-MX') : '';
+      const horaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : 'En tránsito';
 
-    csvContent += "RASTREO ESPECIAL DE VIAJE,,,,,\n";
-    csvContent += `Camion:,${esc(viajeActivoRastreo.unidad)},,Chofer:,${esc(viajeActivoRastreo.chofer)},\n`;
-    csvContent += `Caja:,${esc(viajeActivoRastreo.caja)},,Origen :,${esc(viajeActivoRastreo.origen)},\n`;
-    csvContent += `Cliente:,${esc(viajeActivoRastreo.cliente)},,Destino:,${esc(viajeActivoRastreo.destino)},\n`;
-    csvContent += "INFORMACION DE SALIDA DE ORIGEN,Fecha,Hora,Lugar,,No. de Sello\n";
-    csvContent += `,${fechaI},${horaI},${esc(viajeActivoRastreo.origen)},,${esc(viajeActivoRastreo.sello || viajeActivoRastreo.cp)}\n`;
-    csvContent += "Confirmar con el chofer inspeccion de 17 puntos,,,,          Si,          No\n";
-    csvContent += "RASTREO  ,,,,,\n";
-    csvContent += "LOCALIZACION CADA HORA,,,,,\n";
-    csvContent += "FECHA Y HORA,UBICACION / LUGAR,ESTATUS,VELOCIDAD,OBSERVACIONES,LINK GPS\n";
+      // 2. Encabezado principal
+      worksheet.mergeCells('A1:F1');
+      const titleCell = worksheet.getCell('A1');
+      titleCell.value = 'RASTREO ESPECIAL DE VIAJE';
+      titleCell.font = { bold: true, size: 14 };
+      titleCell.alignment = { horizontal: 'center' };
 
-    puntosRevision.forEach(p => {
-      const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
-      const ubiLugar = `${p.ubicacion || ''} ${p.lugar ? '- ' + p.lugar : ''}`;
-      csvContent += `${esc(fechaHora)},${esc(ubiLugar)},${esc(p.estatus)},${esc(p.velocidad)},${esc(p.observaciones)},${esc(p.link)}\n`;
-    });
+      // 3. Información general del viaje
+      const row2 = worksheet.addRow(['Camion:', viajeActivoRastreo.unidad, '', 'Chofer:', viajeActivoRastreo.chofer, '']);
+      const row3 = worksheet.addRow(['Caja:', viajeActivoRastreo.caja, '', 'Origen :', viajeActivoRastreo.origen, '']);
+      const row4 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
+      
+      [row2, row3, row4].forEach(row => {
+        row.getCell(1).font = { bold: true };
+        row.getCell(4).font = { bold: true };
+      });
 
-    csvContent += "\n";
-    csvContent += "INFORMACION DE LLEGADA A DESTINO,Fecha,Hora,Lugar,,No. de Sello\n";
-    csvContent += `,${fechaF},${horaF},${esc(viajeActivoRastreo.destino)},,${esc(viajeActivoRastreo.sello || '')}\n`;
+      // 4. Bloque Salida
+      worksheet.addRow([]); // Espacio
+      const depHeader = worksheet.addRow(['INFORMACION DE SALIDA DE ORIGEN', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
+      depHeader.font = { bold: true };
+      worksheet.addRow(['', fechaI, horaI, viajeActivoRastreo.origen, '', viajeActivoRastreo.sello || viajeActivoRastreo.cp]);
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+      // 5. Los 17 Puntos
+      worksheet.addRow([]);
+      const inspRow = worksheet.addRow(['Confirmar con el chofer inspeccion de 17 puntos', '', '', '', 'Si', 'No']);
+      inspRow.font = { bold: true };
+      worksheet.mergeCells(`A${inspRow.number}:D${inspRow.number}`);
+
+      // 6. Encabezado de la bitácora
+      worksheet.addRow([]);
+      const trackTitle = worksheet.addRow(['RASTREO']);
+      trackTitle.font = { bold: true };
+      worksheet.addRow(['LOCALIZACION CADA HORA']);
+
+      const headerRow = worksheet.addRow(['FECHA Y HORA', 'UBICACION / LUGAR', 'ESTATUS', 'VELOCIDAD', 'OBSERVACIONES', 'LINK GPS']);
+      headerRow.font = { bold: true };
+      headerRow.alignment = { horizontal: 'center' };
+      // Fondo gris y bordes para encabezados
+      headerRow.eachCell(cell => {
+         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      });
+
+      // 7. Llenado dinámico de puntos
+      puntosRevision.forEach(p => {
+        const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
+        const ubiLugar = `${p.ubicacion || ''} ${p.lugar ? '- ' + p.lugar : ''}`;
+        
+        const dataRow = worksheet.addRow([fechaHora, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
+        
+        // Manejo elegante del Link GPS (Hyperlink real en Excel)
+        const linkCell = dataRow.getCell(6);
+        if (p.link) {
+           linkCell.value = { text: 'Ver Mapa', hyperlink: p.link };
+           linkCell.font = { color: { argb: 'FF0563C1' }, underline: true }; // Azul clásico de link
+           linkCell.alignment = { horizontal: 'center' };
+        } else {
+           linkCell.value = '-';
+           linkCell.alignment = { horizontal: 'center' };
+        }
+
+        // Bordes a todas las celdas de datos
+        dataRow.eachCell(cell => {
+          cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+        });
+      });
+
+      // 8. Bloque Llegada Destino
+      worksheet.addRow([]);
+      const arrHeader = worksheet.addRow(['INFORMACION DE LLEGADA A DESTINO', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
+      arrHeader.font = { bold: true };
+      worksheet.addRow(['', fechaF, horaF, viajeActivoRastreo.destino, '', viajeActivoRastreo.sello || '']);
+
+      // 9. Generar y descargar (File-Saver)
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.xlsx`);
+      
+    } catch (error) {
+      console.error("Error generando Excel:", error);
+      message.error("Hubo un error al generar el archivo Excel");
+    }
   };
 
   // LÓGICA PARA FILTRAR LA PESTAÑA DE REPORTES
@@ -1318,7 +1376,7 @@ function App() {
                       <Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <Button type="primary" onClick={() => handleAgregar('vehiculos')}>{editandoId && tipoEdicion === 'vehiculos' ? 'Guardar Cambios' : 'Agregar'}</Button>
-                        {editandoId && tipoEdicion === 'vehiculos' && <Button onClick={cancelarEdicion}>Cancelar</Button>}
+                        <Button onClick={cancelarEdicion}>Cancelar</Button>
                       </div>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('vehiculos', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
@@ -1331,7 +1389,7 @@ function App() {
                       <Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <Button type="primary" onClick={() => handleAgregar('choferes')}>{editandoId && tipoEdicion === 'choferes' ? 'Guardar Cambios' : 'Agregar'}</Button>
-                        {editandoId && tipoEdicion === 'choferes' && <Button onClick={cancelarEdicion}>Cancelar</Button>}
+                        <Button onClick={cancelarEdicion}>Cancelar</Button>
                       </div>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('choferes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
@@ -1346,7 +1404,7 @@ function App() {
                       <Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                         <Button type="primary" onClick={() => handleAgregar('clientes')}>{editandoId && tipoEdicion === 'clientes' ? 'Guardar Cambios' : 'Agregar'}</Button>
-                        {editandoId && tipoEdicion === 'clientes' && <Button onClick={cancelarEdicion}>Cancelar</Button>}
+                        <Button onClick={cancelarEdicion}>Cancelar</Button>
                       </div>
                     </div>
                     <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('clientes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
@@ -1742,8 +1800,9 @@ function App() {
 
                 {/* BOTONES FINALES */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '15px', borderTop: '1px solid #333', paddingTop: '15px' }}>
-                  <Button icon={<Download size={16} />} style={{ backgroundColor: '#107c41', color: 'white', border: 'none' }} onClick={handleDescargarCSV}>
-                    Descargar Excel (.csv)
+                  {/* AQUÍ SE REALIZÓ EL CAMBIO PARA MANDAR A LLAMAR AL NUEVO EXCEL */}
+                  <Button icon={<Download size={16} />} style={{ backgroundColor: '#107c41', color: 'white', border: 'none' }} onClick={handleDescargarExcel}>
+                    Descargar Excel (.xlsx)
                   </Button>
                   <Button onClick={cerrarRastreoEspecial} style={{ background: '#262626', color: '#fff', border: 'none' }}>
                     Cerrar

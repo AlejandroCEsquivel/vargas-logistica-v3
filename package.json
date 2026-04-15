@@ -11,6 +11,8 @@
     "antd": "^6.3.5",
     "csv-parser": "^3.2.0",
     "dayjs": "^1.11.20",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "firebase": "^12.11.0",
     "firebase-admin": "^10.3.0",
     "lucide-react": "^1.7.0",
