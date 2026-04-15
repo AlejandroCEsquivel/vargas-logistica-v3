@@ -439,13 +439,17 @@ function App() {
   };
 
   const handleCrearViaje = async () => {
-    if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer || !datosNuevoViaje.cp) {
-      return message.warning("Por favor completa los campos obligatorios resaltados");
+    // MODIFICADO: Ya no exige el número de Carta Porte (cp) para avanzar
+    if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer) {
+      return message.warning("Por favor completa Unidad y Chofer");
     }
 
-    const existeCP = viajes.some(v => v.cp === datosNuevoViaje.cp && v.estatus === 'viajes');
-    if (existeCP) {
-      return message.error("Este número de Carta Porte ya está registrado en un viaje activo.");
+    // Si el usuario capturó una CP, verificamos que no esté duplicada en viajes activos.
+    if (datosNuevoViaje.cp && datosNuevoViaje.cp.trim() !== '') {
+      const existeCP = viajes.some(v => v.cp === datosNuevoViaje.cp && v.estatus === 'viajes');
+      if (existeCP) {
+        return message.error("Este número de Carta Porte ya está registrado en un viaje activo.");
+      }
     }
 
     if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio && !/\S+@\S+\.\S+/.test(datosNuevoViaje.correoEnvio)) {
@@ -466,6 +470,8 @@ function App() {
 
       const nuevoRegistro = {
         ...datosNuevoViaje,
+        // Si la CP está vacía, guardamos "Pendiente" o lo dejamos en blanco
+        cp: datosNuevoViaje.cp || 'Pendiente', 
         fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
         hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
         timestampFiltro: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.valueOf() : new Date().getTime(),
@@ -533,7 +539,7 @@ function App() {
               </tr>
               <tr>
                 <td style="border: 1px solid #000; padding: 5px;"># Carta Porte:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cp || ''}</td>
+                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.cp}</td>
               </tr>
               <tr>
                 <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
@@ -549,7 +555,7 @@ function App() {
 
         await enviarConBrevo(
           destinatariosString,
-          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${datosNuevoViaje.cp} - ${nuevoRegistro.hora}`,
+          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${nuevoRegistro.cp} - ${nuevoRegistro.hora}`,
           tablaNuevoViajeHTML
         );
         
