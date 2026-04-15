@@ -8,6 +8,7 @@ import 'antd/dist/reset.css';
 
 const { Option } = Select;
 const { Panel } = Collapse;
+const { RangePicker } = DatePicker; // NUEVO: Extraemos RangePicker para los filtros
 
 // FUNCIÓN ACTUALIZADA: ENVÍA LOS DATOS DIRECTO A LA API DE VERCEL
 const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
@@ -150,6 +151,10 @@ function App() {
   const [editandoId, setEditandoId] = useState(null);
   const [tipoEdicion, setTipoEdicion] = useState(null);
 
+  // NUEVOS ESTADOS PARA BÚSQUEDA Y FILTROS EN REPORTES
+  const [textoBusqueda, setTextoBusqueda] = useState('');
+  const [rangoFechas, setRangoFechas] = useState(null);
+
   const [sugerencias, setSugerencias] = useState({
     estatus: [],
     ubicacion: [],
@@ -197,9 +202,9 @@ function App() {
     hora: null,
     ubicacion: '',
     estatus: '',
-    velocidad: '', // NUEVO
-    lugar: '',     // NUEVO
-    link: '',      // NUEVO
+    velocidad: '', 
+    lugar: '',     
+    link: '',      
     observaciones: ''
   });
 
@@ -614,7 +619,6 @@ function App() {
       const chofer = viajeActivo?.chofer || "N/A";
       const remolque = viajeActivo?.caja || "N/A";
 
-      // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA
       if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
          await updateDoc(doc(db, "viajes", viajeActivo.id), {
              cliente: info.cliente
@@ -748,7 +752,6 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
-        // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA (MASIVO)
         if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
             await updateDoc(doc(db, "viajes", viajeActivo.id), {
                 cliente: info.cliente
@@ -868,7 +871,6 @@ function App() {
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
-      // CONDICIÓN PARA "LIMPIAR LA MEMORIA" SI ESTÁ EN ESPERA
       const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
       const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
 
@@ -909,7 +911,6 @@ function App() {
     </Select>
   );
 
-  // --- FUNCIONES PARA RASTREO ESPECIAL ---
   const abrirRastreoEspecial = (viajeRecord) => {
     setViajeActivoRastreo(viajeRecord);
     setSelloActual(viajeRecord.sello || 'Pendiente');
@@ -920,7 +921,7 @@ function App() {
     setMostrarModalRastreo(false);
     setViajeActivoRastreo(null);
     setPuntosRevision([]);
-    setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', velocidad: '', lugar: '', link: '', observaciones: '' }); // NUEVO: resetear campos
+    setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', velocidad: '', lugar: '', link: '', observaciones: '' }); 
   };
 
   const handleActualizarSello = async () => {
@@ -945,9 +946,9 @@ function App() {
         hora: datosNuevoPunto.hora.format('HH:mm'),
         ubicacion: datosNuevoPunto.ubicacion,
         estatus: datosNuevoPunto.estatus,
-        velocidad: datosNuevoPunto.velocidad || '', // NUEVO
-        lugar: datosNuevoPunto.lugar || '',         // NUEVO
-        link: datosNuevoPunto.link || '',           // NUEVO
+        velocidad: datosNuevoPunto.velocidad || '', 
+        lugar: datosNuevoPunto.lugar || '',         
+        link: datosNuevoPunto.link || '',           
         observaciones: datosNuevoPunto.observaciones,
         timestamp: new Date().getTime()
       });
@@ -991,6 +992,31 @@ function App() {
     link.click();
     document.body.removeChild(link);
   };
+
+  // NUEVO: LÓGICA PARA FILTRAR LA PESTAÑA DE REPORTES
+  const viajesFiltradosReportes = viajes.filter(v => {
+    // 1. Filtro por texto
+    const termino = textoBusqueda.toLowerCase();
+    const coincideTexto = !termino || (
+      (v.unidad && v.unidad.toLowerCase().includes(termino)) ||
+      (v.chofer && v.chofer.toLowerCase().includes(termino)) ||
+      (v.cliente && v.cliente.toLowerCase().includes(termino)) ||
+      (v.cp && v.cp.toLowerCase().includes(termino)) ||
+      (v.origen && v.origen.toLowerCase().includes(termino)) ||
+      (v.destino && v.destino.toLowerCase().includes(termino))
+    );
+
+    // 2. Filtro por fechas
+    let coincideFecha = true;
+    if (rangoFechas && rangoFechas[0] && rangoFechas[1] && v.fecha) {
+      const fechaViaje = dayjs(v.fecha);
+      const fechaInicio = rangoFechas[0].startOf('day');
+      const fechaFin = rangoFechas[1].endOf('day');
+      coincideFecha = fechaViaje.isAfter(fechaInicio) && fechaViaje.isBefore(fechaFin);
+    }
+
+    return coincideTexto && coincideFecha;
+  });
 
   const columnasReportes = [
     { title: 'Unidad', dataIndex: 'unidad', key: 'unidad' },
@@ -1214,14 +1240,39 @@ function App() {
           {vistaActual === 'reportes' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
+              
+              {/* NUEVO: BARRA DE BÚSQUEDA Y FILTROS */}
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span>
+                  <Input 
+                    prefix={<Search size={16} color="#666" />} 
+                    placeholder="Buscar por unidad, chofer, cliente, carta porte..." 
+                    value={textoBusqueda}
+                    onChange={(e) => setTextoBusqueda(e.target.value)}
+                    style={{ background: '#262626', border: '1px solid #444', color: '#fff' }}
+                    allowClear
+                  />
+                </div>
+                <div style={{ width: '300px' }}>
+                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span>
+                  <RangePicker 
+                    style={{ width: '100%' }}
+                    value={rangoFechas}
+                    onChange={(dates) => setRangoFechas(dates)}
+                    getPopupContainer={trigger => trigger.parentNode}
+                  />
+                </div>
+              </div>
+
               <Table 
-                dataSource={viajes}
+                dataSource={viajesFiltradosReportes} // ACTUALIZADO: Ahora usa la lista filtrada
                 columns={columnasReportes} 
                 expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
                 size="small"
                 rowKey="id"
-                pagination={{ pageSize: 10 }}
-                locale={{ emptyText: <Empty description="No hay datos de reportes disponibles" /> }}
+                pagination={{ pageSize: 15 }}
+                locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
               />
             </div>
           )}
@@ -1351,6 +1402,7 @@ function App() {
                     <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
                   
+                  {/* AUTO-COMPLETAR CORREO AL SELECCIONAR CLIENTE */}
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
                     <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} 
                       onChange={(val) => {
@@ -1650,10 +1702,10 @@ function App() {
                       { title: 'Hora', dataIndex: 'hora', key: 'hora', width: 70 },
                       { title: 'Ubicación', dataIndex: 'ubicacion', key: 'ubicacion' },
                       { title: 'Estatus', dataIndex: 'estatus', key: 'estatus' },
-                      { title: 'Velocidad', dataIndex: 'velocidad', key: 'velocidad' }, // NUEVO
-                      { title: 'Lugar', dataIndex: 'lugar', key: 'lugar' },         // NUEVO
+                      { title: 'Velocidad', dataIndex: 'velocidad', key: 'velocidad' }, 
+                      { title: 'Lugar', dataIndex: 'lugar', key: 'lugar' },         
                       { title: 'Observaciones', dataIndex: 'observaciones', key: 'observaciones' },
-                      { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Mapa</a> : '-' } // NUEVO
+                      { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Mapa</a> : '-' } 
                     ]}
                   />
                 </div>
