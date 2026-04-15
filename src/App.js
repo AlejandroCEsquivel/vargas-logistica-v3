@@ -619,7 +619,6 @@ function App() {
       const chofer = viajeActivo?.chofer || "N/A";
       const remolque = viajeActivo?.caja || "N/A";
 
-      // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA
       if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
          await updateDoc(doc(db, "viajes", viajeActivo.id), {
              cliente: info.cliente
@@ -753,7 +752,6 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
-        // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA (MASIVO)
         if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
             await updateDoc(doc(db, "viajes", viajeActivo.id), {
                 cliente: info.cliente
@@ -873,7 +871,6 @@ function App() {
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
-      // CONDICIÓN PARA "LIMPIAR LA MEMORIA" SI ESTÁ EN ESPERA
       const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
       const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
 
@@ -967,7 +964,7 @@ function App() {
     }
   };
 
-  // NUEVO: DESCARGA DE EXCEL ADAPTADA A LA PLANTILLA
+  // NUEVO: DESCARGA DE EXCEL ADAPTADA A LA PLANTILLA Y CONFIGURACIÓN REGIONAL
   const handleDescargarCSV = () => {
     if (puntosRevision.length === 0) {
       return message.warning("No hay puntos registrados para descargar.");
@@ -990,6 +987,10 @@ function App() {
 
     // BOM para UTF-8 en Excel
     let csvContent = '\uFEFF'; 
+    
+    // TRUCO MÁGICO PARA EXCEL LATAM (Fuerza a leer comas como separador)
+    csvContent += "sep=,\n"; 
+
     csvContent += "RASTREO ESPECIAL DE VIAJE,,,,,\n";
     csvContent += `Camion:,${esc(viajeActivoRastreo.unidad)},,Chofer:,${esc(viajeActivoRastreo.chofer)},\n`;
     csvContent += `Caja:,${esc(viajeActivoRastreo.caja)},,Origen :,${esc(viajeActivoRastreo.origen)},\n`;
@@ -1009,7 +1010,7 @@ function App() {
 
     csvContent += "\n";
     csvContent += "INFORMACION DE LLEGADA A DESTINO,Fecha,Hora,Lugar,,No. de Sello\n";
-    csvContent += `,${fechaF},${horaF},${esc(viajeActivoRastreo.destino)},,${esc(viajeActivoRastreo.sello)}\n`;
+    csvContent += `,${fechaF},${horaF},${esc(viajeActivoRastreo.destino)},,${esc(viajeActivoRastreo.sello || '')}\n`;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1270,7 +1271,7 @@ function App() {
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
               
-              {/* NUEVO: BARRA DE BÚSQUEDA Y FILTROS */}
+              {/* BARRA DE BÚSQUEDA Y FILTROS */}
               <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
                 <div style={{ flex: 1 }}>
                   <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span>
