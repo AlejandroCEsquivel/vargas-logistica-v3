@@ -197,6 +197,9 @@ function App() {
     hora: null,
     ubicacion: '',
     estatus: '',
+    velocidad: '', // NUEVO
+    lugar: '',     // NUEVO
+    link: '',      // NUEVO
     observaciones: ''
   });
 
@@ -611,7 +614,7 @@ function App() {
       const chofer = viajeActivo?.chofer || "N/A";
       const remolque = viajeActivo?.caja || "N/A";
 
-      // NUEVO: ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA
+      // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA
       if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
          await updateDoc(doc(db, "viajes", viajeActivo.id), {
              cliente: info.cliente
@@ -745,7 +748,7 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
-        // NUEVO: ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA (MASIVO)
+        // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA (MASIVO)
         if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
             await updateDoc(doc(db, "viajes", viajeActivo.id), {
                 cliente: info.cliente
@@ -865,14 +868,14 @@ function App() {
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
-      // NUEVO: CONDICIÓN PARA "LIMPIAR LA MEMORIA" SI ESTÁ EN ESPERA
+      // CONDICIÓN PARA "LIMPIAR LA MEMORIA" SI ESTÁ EN ESPERA
       const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
       const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
 
       nuevasBitacoras[v.unidad] = {
         cliente: clienteParaMostrar || undefined, 
         correoEnvio: clienteInfo?.correo || '',
-        enviarACliente: v.estatus === 'espera' ? false : true // Desmarcamos por defecto en espera para evitar accidentes
+        enviarACliente: v.estatus === 'espera' ? false : true 
       };
     });
 
@@ -917,7 +920,7 @@ function App() {
     setMostrarModalRastreo(false);
     setViajeActivoRastreo(null);
     setPuntosRevision([]);
-    setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', observaciones: '' });
+    setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', velocidad: '', lugar: '', link: '', observaciones: '' }); // NUEVO: resetear campos
   };
 
   const handleActualizarSello = async () => {
@@ -942,9 +945,9 @@ function App() {
         hora: datosNuevoPunto.hora.format('HH:mm'),
         ubicacion: datosNuevoPunto.ubicacion,
         estatus: datosNuevoPunto.estatus,
-        velocidad: '', // Compatibilidad con inyección auto
-        lugar: '',     // Compatibilidad con inyección auto
-        link: '',      // Compatibilidad con inyección auto
+        velocidad: datosNuevoPunto.velocidad || '', // NUEVO
+        lugar: datosNuevoPunto.lugar || '',         // NUEVO
+        link: datosNuevoPunto.link || '',           // NUEVO
         observaciones: datosNuevoPunto.observaciones,
         timestamp: new Date().getTime()
       });
@@ -953,14 +956,13 @@ function App() {
       await guardarSugerenciaAutomatica('estatus', datosNuevoPunto.estatus);
 
       message.success("Punto de revisión agregado exitosamente");
-      setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', observaciones: '' });
+      setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', velocidad: '', lugar: '', link: '', observaciones: '' });
     } catch (e) {
       console.error("Error agregando punto:", e);
       message.error("No se pudo agregar el punto de revisión");
     }
   };
 
-  // NUEVO: DESCARGA DE EXCEL ACTUALIZADA CON HISTORIAL COMPLETO Y FECHAS
   const handleDescargarCSV = () => {
     if (puntosRevision.length === 0) {
       return message.warning("No hay puntos registrados para descargar.");
@@ -1062,7 +1064,7 @@ function App() {
                   <Table 
                     dataSource={obtenerDatosTabla()} 
                     rowKey="id"
-                    expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} // NUEVO: FILA EXPANDIBLE
+                    expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
                     columns={[
                       { 
                         title: 'Acciones', 
@@ -1190,7 +1192,7 @@ function App() {
               <Table 
                 dataSource={viajes.filter(v => v.estatus === 'finalizado')} 
                 rowKey="id"
-                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} // NUEVO: FILA EXPANDIBLE
+                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
                 columns={[
                   { title: 'Fecha', dataIndex: 'fecha' }, 
                   { title: 'Carta porte', dataIndex: 'cp' }, 
@@ -1215,7 +1217,7 @@ function App() {
               <Table 
                 dataSource={viajes}
                 columns={columnasReportes} 
-                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} // NUEVO: FILA EXPANDIBLE
+                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
                 size="small"
                 rowKey="id"
                 pagination={{ pageSize: 10 }}
@@ -1349,7 +1351,6 @@ function App() {
                     <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
                   
-                  {/* AUTO-COMPLETAR CORREO AL SELECCIONAR CLIENTE */}
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
                     <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} 
                       onChange={(val) => {
@@ -1544,10 +1545,10 @@ function App() {
             </div>
           </Modal>
 
-          {/* MODAL RASTREO ESPECIAL */}
+          {/* MODAL RASTREO ESPECIAL (ESPEJO) */}
           {mostrarModalRastreo && viajeActivoRastreo && (
             <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, padding: '20px' }}>
-              <div style={{ width: '1000px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '25px', maxHeight: '95vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ width: '1100px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '25px', maxHeight: '95vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
                   <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6' }}>Rastreo Especial de Viaje</span>
@@ -1575,7 +1576,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* AGREGAR PUNTO DE REVISIÓN - ORGANIZADO EN 2 FILAS */}
+                {/* AGREGAR PUNTO DE REVISIÓN - ESPEJO */}
                 <div style={{ 
                   background: 'rgba(59, 130, 246, 0.1)', 
                   padding: '20px', 
@@ -1590,7 +1591,7 @@ function App() {
                     AGREGAR PUNTO DE REVISIÓN
                   </h3>
 
-                  {/* FILA 1: Tiempo y Lugar */}
+                  {/* FILA 1: Tiempos y Ubicación */}
                   <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
                     <div style={{ flex: 1 }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Fecha</span>
@@ -1600,19 +1601,31 @@ function App() {
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Hora</span>
                       <TimePicker style={{ width: '100%' }} format="HH:mm" value={datosNuevoPunto.hora} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, hora: v})} getPopupContainer={t => t.parentNode} />
                     </div>
-                    <div style={{ flex: 3, minWidth: '0' }}>
+                    <div style={{ flex: 2, minWidth: '0' }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Ubicación</span>
                       <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Ciudad, Estado o Punto de control" />
                     </div>
+                    <div style={{ flex: 1, minWidth: '0' }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Velocidad</span>
+                      <SelectInteligente categoria="velocidad" value={datosNuevoPunto.velocidad} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, velocidad: v})} placeholder="Ej. 80 KM" />
+                    </div>
                   </div>
 
-                  {/* FILA 2: Estatus, Notas y Acción */}
+                  {/* FILA 2: Estatus, Lugar, Link y Acción */}
                   <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1.5, minWidth: '0' }}>
+                    <div style={{ flex: 1, minWidth: '0' }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Estatus</span>
-                      <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus del viaje" />
+                      <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus" />
                     </div>
-                    <div style={{ flex: 3 }}>
+                    <div style={{ flex: 1, minWidth: '0' }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Lugar</span>
+                      <SelectInteligente categoria="lugar" value={datosNuevoPunto.lugar} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, lugar: v})} placeholder="Lugar" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Link GPS</span>
+                      <Input value={datosNuevoPunto.link} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, link: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} placeholder="URL..." />
+                    </div>
+                    <div style={{ flex: 2 }}>
                       <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Observaciones</span>
                       <Input value={datosNuevoPunto.observaciones} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, observaciones: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} placeholder="Notas adicionales..." />
                     </div>
@@ -1624,7 +1637,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* TABLA DE HISTORIAL DE PUNTOS */}
+                {/* TABLA DE HISTORIAL DE PUNTOS - ESPEJO */}
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                   <Table 
                     dataSource={puntosRevision}
@@ -1633,11 +1646,14 @@ function App() {
                     pagination={false}
                     locale={{ emptyText: <Empty description="Aún no hay puntos de revisión para este viaje." /> }}
                     columns={[
-                      { title: 'Fecha', dataIndex: 'fecha', key: 'fecha', width: 100 },
-                      { title: 'Hora', dataIndex: 'hora', key: 'hora', width: 80 },
+                      { title: 'Fecha', dataIndex: 'fecha', key: 'fecha', width: 90 },
+                      { title: 'Hora', dataIndex: 'hora', key: 'hora', width: 70 },
                       { title: 'Ubicación', dataIndex: 'ubicacion', key: 'ubicacion' },
                       { title: 'Estatus', dataIndex: 'estatus', key: 'estatus' },
-                      { title: 'Observaciones', dataIndex: 'observaciones', key: 'observaciones' }
+                      { title: 'Velocidad', dataIndex: 'velocidad', key: 'velocidad' }, // NUEVO
+                      { title: 'Lugar', dataIndex: 'lugar', key: 'lugar' },         // NUEVO
+                      { title: 'Observaciones', dataIndex: 'observaciones', key: 'observaciones' },
+                      { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Mapa</a> : '-' } // NUEVO
                     ]}
                   />
                 </div>
