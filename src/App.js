@@ -981,13 +981,14 @@ function App() {
       const worksheet = workbook.addWorksheet('Rastreo');
 
       // 1. Configurar anchos de columna para que se vea como plantilla oficial
+      // SE INCREMENTAN LOS ANCHOS PARA QUE NO SE CORTE LA INFORMACIÓN
       worksheet.columns = [
-        { width: 18 }, // A: Fecha y Hora
-        { width: 40 }, // B: Ubicacion / Lugar
-        { width: 18 }, // C: Estatus
-        { width: 18 }, // D: Velocidad
-        { width: 45 }, // E: Observaciones
-        { width: 15 }  // F: Link GPS
+        { width: 22 }, // A: Fecha y Hora
+        { width: 45 }, // B: Ubicacion / Lugar / Chofer
+        { width: 18 }, // C: Estatus / Origen
+        { width: 22 }, // D: Velocidad / Destino
+        { width: 55 }, // E: Observaciones (más ancho)
+        { width: 20 }  // F: Link GPS / Sello
       ];
 
       // Tiempos extraídos de tu lógica
@@ -996,48 +997,73 @@ function App() {
       const fechaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleDateString('es-MX') : '';
       const horaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : 'En tránsito';
 
+      // Estilos reutilizables
+      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } }; // Azul oscuro institucional
+      const subHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; // Gris claro
+      const borderStyle = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+
       // 2. Encabezado principal
-      worksheet.mergeCells('A1:F1');
+      worksheet.mergeCells('A1:F2');
       const titleCell = worksheet.getCell('A1');
-      titleCell.value = 'RASTREO ESPECIAL DE VIAJE';
-      titleCell.font = { bold: true, size: 14 };
-      titleCell.alignment = { horizontal: 'center' };
+      titleCell.value = 'RASTREO ESPECIAL DE VIAJE FORÁNEO';
+      titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+      titleCell.fill = headerFill;
+      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+      worksheet.addRow([]); // Espacio
 
       // 3. Información general del viaje
-      const row2 = worksheet.addRow(['Camion:', viajeActivoRastreo.unidad, '', 'Chofer:', viajeActivoRastreo.chofer, '']);
-      const row3 = worksheet.addRow(['Caja:', viajeActivoRastreo.caja, '', 'Origen :', viajeActivoRastreo.origen, '']);
-      const row4 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
+      const row4 = worksheet.addRow(['Camión:', viajeActivoRastreo.unidad, '', 'Chofer:', viajeActivoRastreo.chofer, '']);
+      const row5 = worksheet.addRow(['Caja:', viajeActivoRastreo.caja, '', 'Origen:', viajeActivoRastreo.origen, '']);
+      const row6 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
+      const row7 = worksheet.addRow(['Carta Porte:', viajeActivoRastreo.cp, '', '', '', '']);
       
-      [row2, row3, row4].forEach(row => {
+      [row4, row5, row6, row7].forEach(row => {
         row.getCell(1).font = { bold: true };
         row.getCell(4).font = { bold: true };
+        row.getCell(2).alignment = { horizontal: 'left', wrapText: true };
+        row.getCell(5).alignment = { horizontal: 'left', wrapText: true };
       });
 
       // 4. Bloque Salida
-      worksheet.addRow([]); // Espacio
-      const depHeader = worksheet.addRow(['INFORMACION DE SALIDA DE ORIGEN', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
-      depHeader.font = { bold: true };
-      worksheet.addRow(['', fechaI, horaI, viajeActivoRastreo.origen, '', viajeActivoRastreo.sello || viajeActivoRastreo.cp]);
+      worksheet.addRow([]); 
+      const depHeader = worksheet.addRow(['INFORMACIÓN DE SALIDA DE ORIGEN', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
+      depHeader.eachCell(cell => {
+         cell.font = { bold: true };
+         cell.fill = subHeaderFill;
+         cell.border = borderStyle;
+         cell.alignment = { horizontal: 'center' };
+      });
+      
+      const depData = worksheet.addRow(['', fechaI, horaI, viajeActivoRastreo.origen, '', viajeActivoRastreo.sello || viajeActivoRastreo.cp]);
+      depData.eachCell(cell => {
+          cell.border = borderStyle;
+          cell.alignment = { horizontal: 'center', wrapText: true };
+      });
+      worksheet.mergeCells(`D${depData.number}:E${depData.number}`); // Unir celdas de lugar
 
       // 5. Los 17 Puntos
       worksheet.addRow([]);
-      const inspRow = worksheet.addRow(['Confirmar con el chofer inspeccion de 17 puntos', '', '', '', 'Si', 'No']);
+      const inspRow = worksheet.addRow(['Confirmar con el chofer inspección de 17 puntos', '', '', '', 'Sí [  ]', 'No [  ]']);
       inspRow.font = { bold: true };
+      inspRow.fill = subHeaderFill;
       worksheet.mergeCells(`A${inspRow.number}:D${inspRow.number}`);
+      inspRow.eachCell(cell => cell.border = borderStyle);
 
       // 6. Encabezado de la bitácora
       worksheet.addRow([]);
-      const trackTitle = worksheet.addRow(['RASTREO']);
-      trackTitle.font = { bold: true };
-      worksheet.addRow(['LOCALIZACION CADA HORA']);
+      const trackTitle = worksheet.addRow(['RASTREO: LOCALIZACIÓN CADA HORA']);
+      trackTitle.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
+      trackTitle.fill = headerFill;
+      worksheet.mergeCells(`A${trackTitle.number}:F${trackTitle.number}`);
+      trackTitle.alignment = { horizontal: 'center' };
 
-      const headerRow = worksheet.addRow(['FECHA Y HORA', 'UBICACION / LUGAR', 'ESTATUS', 'VELOCIDAD', 'OBSERVACIONES', 'LINK GPS']);
-      headerRow.font = { bold: true };
-      headerRow.alignment = { horizontal: 'center' };
-      // Fondo gris y bordes para encabezados
+      const headerRow = worksheet.addRow(['FECHA Y HORA', 'UBICACIÓN / LUGAR', 'ESTATUS', 'VELOCIDAD', 'OBSERVACIONES', 'LINK GPS']);
       headerRow.eachCell(cell => {
-         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
-         cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+         cell.font = { bold: true };
+         cell.fill = subHeaderFill;
+         cell.border = borderStyle;
+         cell.alignment = { horizontal: 'center', vertical: 'middle' };
       });
 
       // 7. Llenado dinámico de puntos
@@ -1047,28 +1073,43 @@ function App() {
         
         const dataRow = worksheet.addRow([fechaHora, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
         
+        dataRow.eachCell((cell, colNumber) => {
+          cell.border = borderStyle;
+          // Alineación y Wrap Text (vital para que no se corte)
+          cell.alignment = { 
+              vertical: 'middle', 
+              horizontal: colNumber === 1 || colNumber === 3 || colNumber === 4 ? 'center' : 'left',
+              wrapText: true // ESTO EVITA QUE SE CORTE EL TEXTO
+          };
+        });
+
         // Manejo elegante del Link GPS (Hyperlink real en Excel)
         const linkCell = dataRow.getCell(6);
         if (p.link) {
            linkCell.value = { text: 'Ver Mapa', hyperlink: p.link };
            linkCell.font = { color: { argb: 'FF0563C1' }, underline: true }; // Azul clásico de link
-           linkCell.alignment = { horizontal: 'center' };
+           linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else {
            linkCell.value = '-';
-           linkCell.alignment = { horizontal: 'center' };
+           linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
         }
-
-        // Bordes a todas las celdas de datos
-        dataRow.eachCell(cell => {
-          cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-        });
       });
 
       // 8. Bloque Llegada Destino
       worksheet.addRow([]);
-      const arrHeader = worksheet.addRow(['INFORMACION DE LLEGADA A DESTINO', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
-      arrHeader.font = { bold: true };
-      worksheet.addRow(['', fechaF, horaF, viajeActivoRastreo.destino, '', viajeActivoRastreo.sello || '']);
+      const arrHeader = worksheet.addRow(['INFORMACIÓN DE LLEGADA A DESTINO', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
+      arrHeader.eachCell(cell => {
+         cell.font = { bold: true };
+         cell.fill = subHeaderFill;
+         cell.border = borderStyle;
+         cell.alignment = { horizontal: 'center' };
+      });
+
+      const arrData = worksheet.addRow(['', fechaF, horaF, viajeActivoRastreo.destino, '', viajeActivoRastreo.sello || '']);
+      arrData.eachCell(cell => {
+          cell.border = borderStyle;
+          cell.alignment = { horizontal: 'center', wrapText: true };
+      });
 
       // 9. Generar y descargar (File-Saver)
       const buffer = await workbook.xlsx.writeBuffer();
