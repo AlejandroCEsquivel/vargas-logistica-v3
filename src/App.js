@@ -439,12 +439,10 @@ function App() {
   };
 
   const handleCrearViaje = async () => {
-    // MODIFICADO: Ya no exige el número de Carta Porte (cp) para avanzar
     if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer) {
       return message.warning("Por favor completa Unidad y Chofer");
     }
 
-    // Si el usuario capturó una CP, verificamos que no esté duplicada en viajes activos.
     if (datosNuevoViaje.cp && datosNuevoViaje.cp.trim() !== '') {
       const existeCP = viajes.some(v => v.cp === datosNuevoViaje.cp && v.estatus === 'viajes');
       if (existeCP) {
@@ -470,7 +468,6 @@ function App() {
 
       const nuevoRegistro = {
         ...datosNuevoViaje,
-        // Si la CP está vacía, guardamos "Pendiente" o lo dejamos en blanco
         cp: datosNuevoViaje.cp || 'Pendiente', 
         fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
         hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
@@ -478,7 +475,7 @@ function App() {
         estatus: 'viajes',
         sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente',
         fechaCreacion: new Date().toISOString(),
-        fechaInicioExacta: new Date().toISOString() // NUEVO: MARCA DE INICIO
+        fechaInicioExacta: new Date().toISOString() 
       };
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
@@ -610,10 +607,16 @@ function App() {
       await guardarSugerenciaAutomatica('velocidad', info.velocidad);
       await guardarSugerenciaAutomatica('lugar', info.lugar);
 
-      // BUSCAMOS INFO DEL VIAJE PARA RELLENAR CHOFER Y REMOLQUE EN LA TABLA DEL CLIENTE
       const viajeActivo = viajes.find(v => v.unidad === unidadNombre && (v.estatus === 'viajes' || v.estatus === 'espera'));
       const chofer = viajeActivo?.chofer || "N/A";
       const remolque = viajeActivo?.caja || "N/A";
+
+      // NUEVO: ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA
+      if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
+         await updateDoc(doc(db, "viajes", viajeActivo.id), {
+             cliente: info.cliente
+         });
+      }
 
       const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
       const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -621,7 +624,6 @@ function App() {
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
       const estatusDelDia = `${fechaFormateada} a las ${horaString}`;
 
-      // NUEVO: INYECCIÓN AUTOMÁTICA A LA CAJA NEGRA (PUNTOS DE REVISIÓN)
       if (viajeActivo) {
         await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
           fecha: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
@@ -648,7 +650,6 @@ function App() {
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
 
       if (info?.enviarACliente && info?.correoEnvio) {
-        // NUEVO FORMATO DE TABLA PARA EL CLIENTE
         const contenidoHtmlIndividual = `
           <div style="font-family: 'Times New Roman', serif; color: #000; font-size: 13px;">
             <p><b>Reporte de Estatus Individual - Transporte Vargas</b></p>
@@ -744,10 +745,16 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
+        // NUEVO: ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA (MASIVO)
+        if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
+            await updateDoc(doc(db, "viajes", viajeActivo.id), {
+                cliente: info.cliente
+            });
+        }
+
         const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
         const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
 
-        // NUEVO: INYECCIÓN AUTOMÁTICA MASIVA A LA CAJA NEGRA
         if (viajeActivo) {
           await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
             fecha: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
@@ -858,11 +865,14 @@ function App() {
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
-      const clienteInfo = clientes.find(c => c.nombre === v.cliente);
+      // NUEVO: CONDICIÓN PARA "LIMPIAR LA MEMORIA" SI ESTÁ EN ESPERA
+      const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
+      const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
+
       nuevasBitacoras[v.unidad] = {
-        cliente: v.cliente,
+        cliente: clienteParaMostrar || undefined, 
         correoEnvio: clienteInfo?.correo || '',
-        enviarACliente: true
+        enviarACliente: v.estatus === 'espera' ? false : true // Desmarcamos por defecto en espera para evitar accidentes
       };
     });
 
