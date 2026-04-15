@@ -619,6 +619,7 @@ function App() {
       const chofer = viajeActivo?.chofer || "N/A";
       const remolque = viajeActivo?.caja || "N/A";
 
+      // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA
       if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
          await updateDoc(doc(db, "viajes", viajeActivo.id), {
              cliente: info.cliente
@@ -752,6 +753,7 @@ function App() {
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
+        // ACTUALIZACIÓN DEL CLIENTE EN EL DOCUMENTO DEL VIAJE SI SE CAMBIÓ DURANTE LA ESPERA (MASIVO)
         if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
             await updateDoc(doc(db, "viajes", viajeActivo.id), {
                 cliente: info.cliente
@@ -871,6 +873,7 @@ function App() {
     const nuevasBitacoras = {};
 
     unidadesEnViaje.forEach(v => {
+      // CONDICIÓN PARA "LIMPIAR LA MEMORIA" SI ESTÁ EN ESPERA
       const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
       const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
 
@@ -964,36 +967,62 @@ function App() {
     }
   };
 
+  // NUEVO: DESCARGA DE EXCEL ADAPTADA A LA PLANTILLA
   const handleDescargarCSV = () => {
     if (puntosRevision.length === 0) {
       return message.warning("No hay puntos registrados para descargar.");
     }
 
-    let csvContent = `Viaje Unidad: ${viajeActivoRastreo.unidad} | Carta Porte: ${viajeActivoRastreo.cp}\n`;
-    csvContent += `Inicio: ${viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}\n`;
-    csvContent += `Fin: ${viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleString('es-MX') : 'Aun en transito'}\n\n`;
-    csvContent += "Fecha,Hora,Ubicacion,Estatus,Velocidad,Lugar,Link,Observaciones\n";
-    
+    // Mini-función para escapar comas en CSV
+    const esc = (val) => {
+      if (!val) return '';
+      const str = String(val);
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const fechaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleDateString('es-MX') : '';
+    const horaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : '';
+    const fechaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleDateString('es-MX') : '';
+    const horaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : 'En tránsito';
+
+    // BOM para UTF-8 en Excel
+    let csvContent = '\uFEFF'; 
+    csvContent += "RASTREO ESPECIAL DE VIAJE,,,,,\n";
+    csvContent += `Camion:,${esc(viajeActivoRastreo.unidad)},,Chofer:,${esc(viajeActivoRastreo.chofer)},\n`;
+    csvContent += `Caja:,${esc(viajeActivoRastreo.caja)},,Origen :,${esc(viajeActivoRastreo.origen)},\n`;
+    csvContent += `Cliente:,${esc(viajeActivoRastreo.cliente)},,Destino:,${esc(viajeActivoRastreo.destino)},\n`;
+    csvContent += "INFORMACION DE SALIDA DE ORIGEN,Fecha,Hora,Lugar,,No. de Sello\n";
+    csvContent += `,${fechaI},${horaI},${esc(viajeActivoRastreo.origen)},,${esc(viajeActivoRastreo.sello || viajeActivoRastreo.cp)}\n`;
+    csvContent += "Confirmar con el chofer inspeccion de 17 puntos,,,,          Si,          No\n";
+    csvContent += "RASTREO  ,,,,,\n";
+    csvContent += "LOCALIZACION CADA HORA,,,,,\n";
+    csvContent += "FECHA Y HORA,UBICACION / LUGAR,ESTATUS,VELOCIDAD,OBSERVACIONES,LINK GPS\n";
+
     puntosRevision.forEach(p => {
-      const obsLimpia = p.observaciones ? p.observaciones.replace(/,/g, " ") : "";
-      const vel = p.velocidad ? p.velocidad.replace(/,/g, " ") : "";
-      const lug = p.lugar ? p.lugar.replace(/,/g, " ") : "";
-      const lnk = p.link ? p.link.replace(/,/g, " ") : "";
-      csvContent += `${p.fecha},${p.hora},${p.ubicacion},${p.estatus},${vel},${lug},${lnk},${obsLimpia}\n`;
+      const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
+      const ubiLugar = `${p.ubicacion || ''} ${p.lugar ? '- ' + p.lugar : ''}`;
+      csvContent += `${esc(fechaHora)},${esc(ubiLugar)},${esc(p.estatus)},${esc(p.velocidad)},${esc(p.observaciones)},${esc(p.link)}\n`;
     });
+
+    csvContent += "\n";
+    csvContent += "INFORMACION DE LLEGADA A DESTINO,Fecha,Hora,Lugar,,No. de Sello\n";
+    csvContent += `,${fechaF},${horaF},${esc(viajeActivoRastreo.destino)},,${esc(viajeActivoRastreo.sello)}\n`;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Historial_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.csv`);
+    link.setAttribute("download", `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  // NUEVO: LÓGICA PARA FILTRAR LA PESTAÑA DE REPORTES
+  // LÓGICA PARA FILTRAR LA PESTAÑA DE REPORTES
   const viajesFiltradosReportes = viajes.filter(v => {
     // 1. Filtro por texto
     const termino = textoBusqueda.toLowerCase();
@@ -1266,7 +1295,7 @@ function App() {
               </div>
 
               <Table 
-                dataSource={viajesFiltradosReportes} // ACTUALIZADO: Ahora usa la lista filtrada
+                dataSource={viajesFiltradosReportes} 
                 columns={columnasReportes} 
                 expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
                 size="small"
