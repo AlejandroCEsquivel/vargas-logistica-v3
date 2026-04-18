@@ -47,9 +47,13 @@ const HistorialViaje = ({ viaje }) => {
   const [nuevoValor, setNuevoValor] = useState(null);
 
   useEffect(() => {
-    const q = query(collection(db, "viajes", viaje.id, "puntos_revision"), orderBy("timestamp", "asc"));
+    // MODIFICADO: Eliminado el orderBy de Firebase para ordenar localmente de forma precisa combinando fecha y hora
+    const q = query(collection(db, "viajes", viaje.id, "puntos_revision"));
     const unsub = onSnapshot(q, (snap) => {
-      setPuntos(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const docsOrdenados = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+        return dayjs(`${a.fecha} ${a.hora}`).valueOf() - dayjs(`${b.fecha} ${b.hora}`).valueOf();
+      });
+      setPuntos(docsOrdenados);
       setLoading(false);
     });
     return () => unsub();
@@ -296,9 +300,13 @@ function App() {
   // EFFECT PARA CARGAR LOS PUNTOS DE RASTREO EN TIEMPO REAL
   useEffect(() => {
     if (!viajeActivoRastreo || !viajeActivoRastreo.id) return;
-    const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"), orderBy("timestamp", "asc"));
+    // MODIFICADO: Retirado orderBy de query para ordenar localmente de forma precisa combinando fecha y hora
+    const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"));
     const unsubscribe = onSnapshot(qPuntos, (snap) => {
-      setPuntosRevision(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const docsOrdenados = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
+        return dayjs(`${a.fecha} ${a.hora}`).valueOf() - dayjs(`${b.fecha} ${b.hora}`).valueOf();
+      });
+      setPuntosRevision(docsOrdenados);
     });
     return () => unsubscribe();
   }, [viajeActivoRastreo]);
@@ -635,9 +643,13 @@ function App() {
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
       const estatusDelDia = `${fechaFormateada} a las ${horaString}`;
 
+      // MODIFICADO: Timestamp ajustado exactamente a lo que se reportó, no a la hora de envío
+      const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
+      const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
+
       if (viajeActivo) {
         await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
-          fecha: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+          fecha: fechaYYYYMMDD,
           hora: horaString,
           ubicacion: info.ubicacion || '',
           estatus: info.estatus || '',
@@ -646,14 +658,14 @@ function App() {
           lugar: info.lugar || '',
           link: info.link || '',
           observaciones: 'Reporte automático de bitácora',
-          timestamp: new Date().getTime()
+          timestamp: timestampAjustado
         });
       }
 
       const reporteParaFirebase = {
         unidad: unidadNombre,
         ...info,
-        fechaReporte: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+        fechaReporte: fechaYYYYMMDD,
         horaString: horaString,
         link: info.link || 'No proporcionado',
         fechaEnvio: new Date().toISOString(),
@@ -764,10 +776,14 @@ function App() {
 
         const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
         const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
+        
+        // MODIFICADO: Timestamp exacto
+        const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
+        const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
 
         if (viajeActivo) {
           await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
-            fecha: info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0],
+            fecha: fechaYYYYMMDD,
             hora: horaString,
             ubicacion: info.ubicacion || '',
             estatus: info.estatus || '',
@@ -776,7 +792,7 @@ function App() {
             lugar: info.lugar || '',
             link: info.link || '',
             observaciones: 'Reporte consolidado automático',
-            timestamp: new Date().getTime()
+            timestamp: timestampAjustado
           });
         }
 
@@ -945,16 +961,21 @@ function App() {
     }
 
     try {
+      // MODIFICADO: Timestamp exacto en lugar de new Date().getTime() para no perder el orden nunca más
+      const fechaAgregado = datosNuevoPunto.fecha.format('YYYY-MM-DD');
+      const horaAgregado = datosNuevoPunto.hora.format('HH:mm');
+      const timestampAjustado = dayjs(`${fechaAgregado} ${horaAgregado}`).valueOf();
+
       await addDoc(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"), {
-        fecha: datosNuevoPunto.fecha.format('YYYY-MM-DD'),
-        hora: datosNuevoPunto.hora.format('HH:mm'),
+        fecha: fechaAgregado,
+        hora: horaAgregado,
         ubicacion: datosNuevoPunto.ubicacion,
         estatus: datosNuevoPunto.estatus,
         velocidad: datosNuevoPunto.velocidad || '', 
         lugar: datosNuevoPunto.lugar || '',         
         link: datosNuevoPunto.link || '',            
         observaciones: datosNuevoPunto.observaciones,
-        timestamp: new Date().getTime()
+        timestamp: timestampAjustado
       });
 
       await guardarSugerenciaAutomatica('ubicacion', datosNuevoPunto.ubicacion);
@@ -972,16 +993,15 @@ function App() {
   // NUEVA FUNCIÓN: DESCARGA DE EXCEL CON FORMATO OFICIAL SEG-T03 (ExcelJS)
   // -------------------------------------------------------------------------
   const handleDescargarExcel = async () => {
-    if (puntosRevision.length === 0) {
-      return message.warning("No hay puntos registrados para descargar.");
-    }
+    // Si no hay puntos pero el viaje tiene fechas, lo generamos en blanco. 
+    // Por si acaso, validamos que haya un viaje cargado.
+    if (!viajeActivoRastreo) return;
 
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Rastreo');
 
       // 1. Configurar anchos de columna para que se vea como plantilla oficial
-      // SE INCREMENTAN LOS ANCHOS PARA QUE NO SE CORTE LA INFORMACIÓN
       worksheet.columns = [
         { width: 22 }, // A: Fecha y Hora
         { width: 45 }, // B: Ubicacion / Lugar / Chofer
@@ -1066,34 +1086,91 @@ function App() {
          cell.alignment = { horizontal: 'center', vertical: 'middle' };
       });
 
-      // 7. Llenado dinámico de puntos
-      puntosRevision.forEach(p => {
+      // ====================================================================
+      // 7. LLENADO DINÁMICO CRONOLÓGICO Y CON RELLENO DE HORAS (NUEVO)
+      // ====================================================================
+      
+      // A) Preparar los puntos reales con un objeto date para poder ordenarlos
+      const puntosAProcesar = puntosRevision.map(p => ({
+        ...p,
+        timeObj: dayjs(`${p.fecha} ${p.hora}`),
+        esReal: true // Bandera para saber que el monitorista sí lo capturó
+      }));
+
+      // B) Identificar qué horas SÍ tienen información para no duplicarlas
+      const horasConPuntos = new Set(puntosAProcesar.map(p => p.timeObj.format('YYYY-MM-DD HH')));
+
+      // C) Determinar el rango de inicio y fin para calcular el intervalo de horas
+      let pivoteInicio = viajeActivoRastreo.fechaInicioExacta ? dayjs(viajeActivoRastreo.fechaInicioExacta) : null;
+      let pivoteFin = viajeActivoRastreo.fechaFinExacta ? dayjs(viajeActivoRastreo.fechaFinExacta) : dayjs(); // Si no ha terminado, es hasta ahora
+
+      // Si no tenemos fecha de inicio exacta registrada en el viaje, tomamos la del primer punto capturado.
+      if (!pivoteInicio && puntosAProcesar.length > 0) {
+        pivoteInicio = puntosAProcesar[0].timeObj;
+      } else if (!pivoteInicio) {
+        pivoteInicio = dayjs(); // Fallback si está totalmente vacío
+      }
+
+      let iteradorHora = pivoteInicio.clone().startOf('hour');
+      const finHoraRango = pivoteFin.clone().endOf('hour');
+
+      // D) Rellenar las horas donde el monitorista no capturó nada
+      while (iteradorHora.isBefore(finHoraRango) || iteradorHora.isSame(finHoraRango, 'hour')) {
+        const keyHora = iteradorHora.format('YYYY-MM-DD HH');
+        
+        // Si no hay ningún punto en esta hora específica, insertamos la fila vacía "fantasma"
+        if (!horasConPuntos.has(keyHora)) {
+          puntosAProcesar.push({
+            fecha: iteradorHora.format('YYYY-MM-DD'),
+            hora: iteradorHora.format('HH:00'),
+            ubicacion: 'SIN REPORTE',
+            lugar: '',
+            estatus: '-',
+            velocidad: '-',
+            observaciones: 'Hora sin captura en bitácora',
+            link: '',
+            timeObj: iteradorHora.clone(),
+            esReal: false
+          });
+        }
+        iteradorHora = iteradorHora.add(1, 'hour');
+      }
+
+      // E) Ordenar absolutamente todo cronológicamente (Los reales y los autogenerados)
+      puntosAProcesar.sort((a, b) => a.timeObj.valueOf() - b.timeObj.valueOf());
+
+      // F) Imprimir en el Excel
+      puntosAProcesar.forEach(p => {
         const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
-        const ubiLugar = `${p.ubicacion || ''} ${p.lugar ? '- ' + p.lugar : ''}`;
+        const ubiLugar = p.esReal ? `${p.ubicacion || ''} ${p.lugar ? '- ' + p.lugar : ''}` : p.ubicacion; // Si es falso, solo dice "SIN REPORTE"
         
         const dataRow = worksheet.addRow([fechaHora, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
         
         dataRow.eachCell((cell, colNumber) => {
           cell.border = borderStyle;
-          // Alineación y Wrap Text (vital para que no se corte)
           cell.alignment = { 
               vertical: 'middle', 
               horizontal: colNumber === 1 || colNumber === 3 || colNumber === 4 ? 'center' : 'left',
-              wrapText: true // ESTO EVITA QUE SE CORTE EL TEXTO
+              wrapText: true 
           };
+
+          // Si es una hora vacía generada por el sistema, la ponemos en gris y cursiva sutilmente
+          if (!p.esReal) {
+            cell.font = { color: { argb: 'FF888888' }, italic: true };
+          }
         });
 
-        // Manejo elegante del Link GPS (Hyperlink real en Excel)
         const linkCell = dataRow.getCell(6);
         if (p.link) {
            linkCell.value = { text: 'Ver Mapa', hyperlink: p.link };
-           linkCell.font = { color: { argb: 'FF0563C1' }, underline: true }; // Azul clásico de link
+           linkCell.font = { color: { argb: 'FF0563C1' }, underline: true }; 
            linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
         } else {
            linkCell.value = '-';
            linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
         }
       });
+      // ====================================================================
 
       // 8. Bloque Llegada Destino
       worksheet.addRow([]);
@@ -1841,7 +1918,6 @@ function App() {
 
                 {/* BOTONES FINALES */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '15px', borderTop: '1px solid #333', paddingTop: '15px' }}>
-                  {/* AQUÍ SE REALIZÓ EL CAMBIO PARA MANDAR A LLAMAR AL NUEVO EXCEL */}
                   <Button icon={<Download size={16} />} style={{ backgroundColor: '#107c41', color: 'white', border: 'none' }} onClick={handleDescargarExcel}>
                     Descargar Excel (.xlsx)
                   </Button>
