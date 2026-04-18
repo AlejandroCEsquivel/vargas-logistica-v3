@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download, Search, Edit3, Check } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox, Space } from 'antd'; 
+import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download, Search, Edit3, Check, ArrowUp, ArrowDown } from 'lucide-react';
+import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox, Space, Switch } from 'antd'; 
 import { db } from './firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import dayjs from 'dayjs'; // Importante para la edición de fechas
@@ -162,6 +162,8 @@ function App() {
   // NUEVOS ESTADOS PARA BÚSQUEDA Y FILTROS EN REPORTES
   const [textoBusqueda, setTextoBusqueda] = useState('');
   const [rangoFechas, setRangoFechas] = useState(null);
+  const [filtroMovimiento, setFiltroMovimiento] = useState('Todos'); // NUEVO: Filtro
+  const [filtroServicio, setFiltroServicio] = useState('Todos'); // NUEVO: Filtro
 
   const [sugerencias, setSugerencias] = useState({
     estatus: [],
@@ -189,7 +191,9 @@ function App() {
     destino: '',
     correoEnvio: '',
     enviarACliente: true,
-    sello: ''
+    sello: '',
+    movimiento: 'Salida',      // NUEVO: Por defecto Salida
+    esExportacion: false       // NUEVO: Por defecto Nacional
   });
 
   const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
@@ -215,6 +219,25 @@ function App() {
     link: '',      
     observaciones: ''
   });
+
+  // NUEVA FUNCIÓN: RENDERIZADO VISUAL DE ETIQUETAS (TAGS)
+  const renderTagsViaje = (viaje) => {
+    if (!viaje) return null;
+    return (
+      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+        {viaje.movimiento === 'Regreso' ? (
+          <span style={{ fontSize: '10px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}><ArrowDown size={10} /> REGRESO</span>
+        ) : (
+          <span style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}><ArrowUp size={10} /> SALIDA</span>
+        )}
+        {viaje.esExportacion ? (
+          <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>🇺🇸 EXPORTACIÓN</span>
+        ) : (
+          <span style={{ fontSize: '10px', background: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>🇲🇽 NACIONAL</span>
+        )}
+      </div>
+    );
+  };
 
   const cargarSugerencias = async () => {
     try {
@@ -300,7 +323,6 @@ function App() {
   // EFFECT PARA CARGAR LOS PUNTOS DE RASTREO EN TIEMPO REAL
   useEffect(() => {
     if (!viajeActivoRastreo || !viajeActivoRastreo.id) return;
-    // MODIFICADO: Retirado orderBy de query para ordenar localmente de forma precisa combinando fecha y hora
     const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"));
     const unsubscribe = onSnapshot(qPuntos, (snap) => {
       const docsOrdenados = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
@@ -495,7 +517,9 @@ function App() {
         estatus: 'viajes',
         sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente',
         fechaCreacion: new Date().toISOString(),
-        fechaInicioExacta: new Date().toISOString() 
+        fechaInicioExacta: new Date().toISOString(),
+        movimiento: datosNuevoViaje.movimiento || 'Salida',
+        esExportacion: datosNuevoViaje.esExportacion || false
       };
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
@@ -562,6 +586,14 @@ function App() {
                 <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
                 <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.sello}</td>
               </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Movimiento:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.movimiento}</td>
+              </tr>
+              <tr>
+                <td style="border: 1px solid #000; padding: 5px;">Servicio:</td>
+                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.esExportacion ? 'Exportación EE.UU.' : 'Nacional'}</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -601,7 +633,8 @@ function App() {
       setDatosNuevoViaje({
         fecha: null, cp: '', hora: null, unidad: undefined, 
         chofer: undefined, caja: '', cliente: undefined, 
-        origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: ''
+        origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: '',
+        movimiento: 'Salida', esExportacion: false
       });
       
     } catch (e) {
@@ -1036,7 +1069,11 @@ function App() {
       const row6 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
       const row7 = worksheet.addRow(['Carta Porte:', viajeActivoRastreo.cp, '', '', '', '']);
       
-      [row4, row5, row6, row7].forEach(row => {
+      const movText = viajeActivoRastreo.movimiento ? viajeActivoRastreo.movimiento.toUpperCase() : 'SALIDA';
+      const expText = viajeActivoRastreo.esExportacion ? 'EXPORTACIÓN EE.UU.' : 'NACIONAL';
+      const row8 = worksheet.addRow(['Movimiento:', movText, '', 'Servicio:', expText, '']);
+      
+      [row4, row5, row6, row7, row8].forEach(row => {
         row.getCell(1).font = { bold: true };
         row.getCell(4).font = { bold: true };
         row.getCell(2).alignment = { horizontal: 'left', wrapText: true };
@@ -1261,11 +1298,27 @@ function App() {
       coincideFecha = fechaViaje.isAfter(fechaInicio) && fechaViaje.isBefore(fechaFin);
     }
 
-    return coincideTexto && coincideFecha;
+    // 3. Filtro Movimiento y Servicio (NUEVO)
+    const coincideMovimiento = filtroMovimiento === 'Todos' || v.movimiento === filtroMovimiento;
+    const coincideServicio = filtroServicio === 'Todos' || 
+                            (filtroServicio === 'Exportacion' && v.esExportacion) || 
+                            (filtroServicio === 'Nacional' && !v.esExportacion);
+
+    return coincideTexto && coincideFecha && coincideMovimiento && coincideServicio;
   });
 
   const columnasReportes = [
-    { title: 'Unidad', dataIndex: 'unidad', key: 'unidad' },
+    { 
+      title: 'Unidad', 
+      dataIndex: 'unidad', 
+      key: 'unidad',
+      render: (text, record) => (
+        <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}>
+          <span style={{fontWeight:'bold'}}>{text}</span>
+          {renderTagsViaje(record)}
+        </div>
+      )
+    },
     { title: 'Salida', dataIndex: 'salida', key: 'salida' },
     { title: 'Chofer', dataIndex: 'chofer', key: 'chofer' },
     { title: 'Caja', dataIndex: 'caja', key: 'caja' },
@@ -1373,7 +1426,16 @@ function App() {
                       { title: 'Fecha', dataIndex: 'fecha' }, 
                       { title: 'Carta porte', dataIndex: 'cp' }, 
                       { title: 'Hora salida', dataIndex: 'hora' },
-                      { title: 'Unidad', dataIndex: 'unidad' }, 
+                      { 
+                        title: 'Unidad', 
+                        dataIndex: 'unidad',
+                        render: (text, record) => (
+                          <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}>
+                            <span style={{fontWeight:'bold'}}>{text}</span>
+                            {renderTagsViaje(record)}
+                          </div>
+                        )
+                      }, 
                       { title: 'Chofer', dataIndex: 'chofer' }, 
                       { title: 'Caja', dataIndex: 'caja' },
                       { title: 'Origen', dataIndex: 'origen' }, 
@@ -1394,8 +1456,11 @@ function App() {
                          <Empty description="No hay unidades en espera" />
                       ) : (
                         obtenerDatosTabla().map(v => (
-                          <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                            {v.unidad}
+                          <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                              <span>{v.unidad}</span>
+                              {renderTagsViaje(v)}
+                            </div>
                             <Popconfirm
                               title="¿Borrar de espera?"
                               description="¿Eliminar esta unidad de la lista de espera?"
@@ -1469,7 +1534,16 @@ function App() {
                   { title: 'Fecha', dataIndex: 'fecha' }, 
                   { title: 'Carta porte', dataIndex: 'cp' }, 
                   { title: 'Hora salida', dataIndex: 'hora' },
-                  { title: 'Unidad', dataIndex: 'unidad' }, 
+                  { 
+                    title: 'Unidad', 
+                    dataIndex: 'unidad',
+                    render: (text, record) => (
+                      <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}>
+                        <span style={{fontWeight:'bold'}}>{text}</span>
+                        {renderTagsViaje(record)}
+                      </div>
+                    )
+                  }, 
                   { title: 'Chofer', dataIndex: 'chofer' }, 
                   { title: 'Caja', dataIndex: 'caja' },
                   { title: 'Origen', dataIndex: 'origen' }, 
@@ -1488,8 +1562,8 @@ function App() {
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
               
               {/* BARRA DE BÚSQUEDA Y FILTROS */}
-              <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
-                <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '200px' }}>
                   <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span>
                   <Input 
                     prefix={<Search size={16} color="#666" />} 
@@ -1500,7 +1574,7 @@ function App() {
                     allowClear
                   />
                 </div>
-                <div style={{ width: '300px' }}>
+                <div style={{ width: '250px' }}>
                   <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span>
                   <RangePicker 
                     style={{ width: '100%' }}
@@ -1508,6 +1582,22 @@ function App() {
                     onChange={(dates) => setRangoFechas(dates)}
                     getPopupContainer={trigger => trigger.parentNode}
                   />
+                </div>
+                <div style={{ width: '150px' }}>
+                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span>
+                  <Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}>
+                    <Option value="Todos">Todos</Option>
+                    <Option value="Salida">Salida</Option>
+                    <Option value="Regreso">Regreso</Option>
+                  </Select>
+                </div>
+                <div style={{ width: '180px' }}>
+                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span>
+                  <Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}>
+                    <Option value="Todos">Todos</Option>
+                    <Option value="Nacional">Nacional 🇲🇽</Option>
+                    <Option value="Exportacion">Exportación 🇺🇸</Option>
+                  </Select>
                 </div>
               </div>
 
@@ -1618,6 +1708,35 @@ function App() {
                       getPopupContainer={(trigger) => trigger.parentNode}
                     />
                   </div>
+
+                  {/* NUEVOS CONTROLES DE MOVIMIENTO Y SERVICIO */}
+                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Movimiento :</label>
+                    <Radio.Group 
+                      value={datosNuevoViaje.movimiento} 
+                      onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, movimiento: e.target.value})}
+                      style={{ flex: 1 }}
+                    >
+                      <Radio.Button value="Salida">Salida</Radio.Button>
+                      <Radio.Button value="Regreso">Regreso</Radio.Button>
+                    </Radio.Group>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '6px' }}>
+                    <label style={{ width: '120px' }}>Servicio :</label>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Switch 
+                        checked={datosNuevoViaje.esExportacion} 
+                        onChange={(checked) => setDatosNuevoViaje({...datosNuevoViaje, esExportacion: checked})} 
+                        checkedChildren="Exportación 🇺🇸" 
+                        unCheckedChildren="Nacional 🇲🇽"
+                      />
+                      <span style={{ fontSize: '13px', color: datosNuevoViaje.esExportacion ? '#fbbf24' : '#4ade80', fontWeight: 'bold' }}>
+                        {datosNuevoViaje.esExportacion ? 'Exportación EE.UU.' : 'Nacional'}
+                      </span>
+                    </div>
+                  </div>
+                  {/* FIN NUEVOS CONTROLES */}
+
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Unidad :</label>
                     <Select 
                       status={!datosNuevoViaje.unidad && "error"}
@@ -1648,7 +1767,6 @@ function App() {
                     <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
                   
-                  {/* AUTO-COMPLETAR CORREO AL SELECCIONAR CLIENTE */}
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
                     <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} 
                       onChange={(val) => {
@@ -1740,7 +1858,15 @@ function App() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 450px))', gap: '25px', marginBottom: '80px' }}>
                   {unidadesSeleccionadasBitacora.map(nombreUnidad => (
                     <div key={nombreUnidad} style={{ background: '#1a1a1a', borderRadius: '4px', border: '1px solid #333' }}>
-                      <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6' }}>{nombreUnidad}</div>
+                      
+                      <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <span style={{ fontSize: '16px' }}>{nombreUnidad}</span>
+                        {(() => {
+                           const vActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
+                           return renderTagsViaje(vActivo);
+                        })()}
+                      </div>
+
                       <div style={{ padding: '25px', background: '#164e63', margin: '15px', borderRadius: '4px' }}>
                         
                         <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
