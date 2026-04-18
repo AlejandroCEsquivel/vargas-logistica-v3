@@ -993,21 +993,19 @@ function App() {
   // NUEVA FUNCIÓN: DESCARGA DE EXCEL CON FORMATO OFICIAL SEG-T03 (ExcelJS)
   // -------------------------------------------------------------------------
   const handleDescargarExcel = async () => {
-    // Si no hay puntos pero el viaje tiene fechas, lo generamos en blanco. 
-    // Por si acaso, validamos que haya un viaje cargado.
     if (!viajeActivoRastreo) return;
 
     try {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Rastreo');
 
-      // 1. Configurar anchos de columna para que se vea como plantilla oficial
+      // 1. Configurar anchos de columna
       worksheet.columns = [
         { width: 22 }, // A: Fecha y Hora
         { width: 45 }, // B: Ubicacion / Lugar / Chofer
         { width: 18 }, // C: Estatus / Origen
         { width: 22 }, // D: Velocidad / Destino
-        { width: 55 }, // E: Observaciones (más ancho)
+        { width: 55 }, // E: Observaciones
         { width: 20 }  // F: Link GPS / Sello
       ];
 
@@ -1087,48 +1085,61 @@ function App() {
       });
 
       // ====================================================================
-      // 7. LLENADO DINÁMICO CRONOLÓGICO Y CON RELLENO DE HORAS (NUEVO)
+      // 7. LLENADO DINÁMICO REFINADO: LIMITES EXACTOS Y SIN DUPLICADOS
       // ====================================================================
       
-      // A) Preparar los puntos reales con un objeto date para poder ordenarlos
+      // A) Preparar los puntos reales con un objeto date para ordenarlos y agruparlos
       const puntosAProcesar = puntosRevision.map(p => ({
         ...p,
         timeObj: dayjs(`${p.fecha} ${p.hora}`),
-        esReal: true // Bandera para saber que el monitorista sí lo capturó
+        esReal: true // Bandera de captura manual real
       }));
 
-      // B) Identificar qué horas SÍ tienen información para no duplicarlas
-      const horasConPuntos = new Set(puntosAProcesar.map(p => p.timeObj.format('YYYY-MM-DD HH')));
+      // B) Identificar las horas que YA TIENEN reporte (para anular las filas fantasma en esa hora)
+      const horasCubiertas = new Set(puntosAProcesar.map(p => p.timeObj.format('YYYY-MM-DD HH')));
 
-      // C) Determinar el rango de inicio y fin para calcular el intervalo de horas
+      // C) Determinar límites de tiempo de la bitácora
       let pivoteInicio = viajeActivoRastreo.fechaInicioExacta ? dayjs(viajeActivoRastreo.fechaInicioExacta) : null;
-      let pivoteFin = viajeActivoRastreo.fechaFinExacta ? dayjs(viajeActivoRastreo.fechaFinExacta) : dayjs(); // Si no ha terminado, es hasta ahora
+      let pivoteFin = viajeActivoRastreo.fechaFinExacta ? dayjs(viajeActivoRastreo.fechaFinExacta) : dayjs(); // Tope hasta ahorita si no ha finalizado
 
-      // Si no tenemos fecha de inicio exacta registrada en el viaje, tomamos la del primer punto capturado.
       if (!pivoteInicio && puntosAProcesar.length > 0) {
         pivoteInicio = puntosAProcesar[0].timeObj;
       } else if (!pivoteInicio) {
-        pivoteInicio = dayjs(); // Fallback si está totalmente vacío
+        pivoteInicio = dayjs();
       }
 
-      let iteradorHora = pivoteInicio.clone().startOf('hour');
-      const finHoraRango = pivoteFin.clone().endOf('hour');
+      // D) INYECTAR MARCADOR DE INICIO
+      puntosAProcesar.push({
+        fecha: pivoteInicio.format('YYYY-MM-DD'),
+        hora: pivoteInicio.format('HH:mm'),
+        ubicacion: '🚀 --- INICIO DE VIAJE ---',
+        lugar: '-',
+        estatus: '-',
+        velocidad: '-',
+        observaciones: '-',
+        link: '-',
+        timeObj: pivoteInicio.clone().subtract(1, 'millisecond'), // Queda forzosamente arriba de la misma hora
+        esMarcador: true
+      });
 
-      // D) Rellenar las horas donde el monitorista no capturó nada
+      // E) RELLENAR HORAS FANTASMAS (Respetando el límite de fin)
+      let iteradorHora = pivoteInicio.clone().startOf('hour');
+      const finHoraRango = pivoteFin.clone().startOf('hour');
+
       while (iteradorHora.isBefore(finHoraRango) || iteradorHora.isSame(finHoraRango, 'hour')) {
         const keyHora = iteradorHora.format('YYYY-MM-DD HH');
         
-        // Si no hay ningún punto en esta hora específica, insertamos la fila vacía "fantasma"
-        if (!horasConPuntos.has(keyHora)) {
+        // Verificamos que la hora no esté cubierta Y que la hora fantasma no rebase la hora de cierre exacta
+        if (!horasCubiertas.has(keyHora) && iteradorHora.isBefore(pivoteFin)) {
           puntosAProcesar.push({
             fecha: iteradorHora.format('YYYY-MM-DD'),
             hora: iteradorHora.format('HH:00'),
             ubicacion: 'SIN REPORTE',
-            lugar: '',
-            estatus: '-',
-            velocidad: '-',
+            lugar: '-', // Formato guión
+            estatus: '-', // Formato guión
+            velocidad: '-', // Formato guión
             observaciones: 'Hora sin captura en bitácora',
-            link: '',
+            link: '-', // Formato guión
             timeObj: iteradorHora.clone(),
             esReal: false
           });
@@ -1136,13 +1147,38 @@ function App() {
         iteradorHora = iteradorHora.add(1, 'hour');
       }
 
-      // E) Ordenar absolutamente todo cronológicamente (Los reales y los autogenerados)
+      // F) INYECTAR MARCADOR DE FIN (Solo si el viaje ya está cerrado)
+      if (viajeActivoRastreo.estatus === 'finalizado' || viajeActivoRastreo.fechaFinExacta) {
+        puntosAProcesar.push({
+          fecha: pivoteFin.format('YYYY-MM-DD'),
+          hora: pivoteFin.format('HH:mm'),
+          ubicacion: '🏁 --- FIN DE VIAJE ---',
+          lugar: '-',
+          estatus: '-',
+          velocidad: '-',
+          observaciones: '-',
+          link: '-',
+          timeObj: pivoteFin.clone().add(1, 'millisecond'), // Queda forzosamente hasta abajo
+          esMarcador: true
+        });
+      }
+
+      // G) ORDENAR TODO ESTRICTAMENTE POR HORA
       puntosAProcesar.sort((a, b) => a.timeObj.valueOf() - b.timeObj.valueOf());
 
-      // F) Imprimir en el Excel
+      // H) IMPRIMIR EN EXCEL CON FORMATO
       puntosAProcesar.forEach(p => {
         const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
-        const ubiLugar = p.esReal ? `${p.ubicacion || ''} ${p.lugar ? '- ' + p.lugar : ''}` : p.ubicacion; // Si es falso, solo dice "SIN REPORTE"
+        
+        // Manejo de la columna 'Ubicación' dependiendo del tipo de dato
+        let ubiLugar = '';
+        if (p.esMarcador) {
+            ubiLugar = p.ubicacion;
+        } else if (p.esReal) {
+            ubiLugar = `${p.ubicacion || ''} ${p.lugar && p.lugar !== '-' ? '- ' + p.lugar : ''}`;
+        } else {
+            ubiLugar = p.ubicacion; // Pone "SIN REPORTE"
+        }
         
         const dataRow = worksheet.addRow([fechaHora, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
         
@@ -1154,14 +1190,18 @@ function App() {
               wrapText: true 
           };
 
-          // Si es una hora vacía generada por el sistema, la ponemos en gris y cursiva sutilmente
-          if (!p.esReal) {
-            cell.font = { color: { argb: 'FF888888' }, italic: true };
+          // Aplicar estilos a Marcadores y a Horas Fantasma
+          if (p.esMarcador) {
+              cell.font = { bold: true };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; // Gris tenue
+          } else if (!p.esReal && !p.esMarcador) {
+              cell.font = { color: { argb: 'FF888888' }, italic: true }; // Texto gris cursiva para SIN REPORTE
           }
         });
 
+        // Manejo elegante del Link GPS (Hyperlink real en Excel) o el guión
         const linkCell = dataRow.getCell(6);
-        if (p.link) {
+        if (p.link && p.link !== '-' && p.link !== '') {
            linkCell.value = { text: 'Ver Mapa', hyperlink: p.link };
            linkCell.font = { color: { argb: 'FF0563C1' }, underline: true }; 
            linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
