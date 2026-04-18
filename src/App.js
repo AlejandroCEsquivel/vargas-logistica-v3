@@ -1001,7 +1001,7 @@ function App() {
 
       // 1. Configurar anchos de columna
       worksheet.columns = [
-        { width: 22 }, // A: Fecha y Hora
+        { width: 38 }, // A: Fecha y Hora (AUMENTADO para que no aplaste los títulos)
         { width: 45 }, // B: Ubicacion / Lugar / Chofer
         { width: 18 }, // C: Estatus / Origen
         { width: 22 }, // D: Velocidad / Destino
