@@ -159,11 +159,23 @@ function App() {
   const [editandoId, setEditandoId] = useState(null);
   const [tipoEdicion, setTipoEdicion] = useState(null);
 
-  // NUEVOS ESTADOS PARA BÚSQUEDA Y FILTROS EN REPORTES
+  // ESTADOS PARA NUEVOS MODALES DE EDICIÓN DE TIEMPOS EN TABLA
+  const [modalTerminarVisible, setModalTerminarVisible] = useState(false);
+  const [viajeATerminar, setViajeATerminar] = useState(null);
+  const [modoTerminar, setModoTerminar] = useState('ahora'); 
+  const [nuevaFechaFin, setNuevaFechaFin] = useState(null);
+  const [nuevaHoraFin, setNuevaHoraFin] = useState(null);
+
+  const [modalEditarInicioVisible, setModalEditarInicioVisible] = useState(false);
+  const [viajeAEditarInicio, setViajeAEditarInicio] = useState(null);
+  const [nuevaFechaInicio, setNuevaFechaInicio] = useState(null);
+  const [nuevaHoraInicio, setNuevaHoraInicio] = useState(null);
+
+  // ESTADOS PARA BÚSQUEDA Y FILTROS EN REPORTES
   const [textoBusqueda, setTextoBusqueda] = useState('');
   const [rangoFechas, setRangoFechas] = useState(null);
-  const [filtroMovimiento, setFiltroMovimiento] = useState('Todos'); // NUEVO: Filtro
-  const [filtroServicio, setFiltroServicio] = useState('Todos'); // NUEVO: Filtro
+  const [filtroMovimiento, setFiltroMovimiento] = useState('Todos');
+  const [filtroServicio, setFiltroServicio] = useState('Todos');
 
   const [sugerencias, setSugerencias] = useState({
     estatus: [],
@@ -192,8 +204,8 @@ function App() {
     correoEnvio: '',
     enviarACliente: true,
     sello: '',
-    movimiento: 'Salida',      // NUEVO: Por defecto Salida
-    esExportacion: false       // NUEVO: Por defecto Nacional
+    movimiento: 'Salida',      
+    esExportacion: false       
   });
 
   const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
@@ -220,21 +232,67 @@ function App() {
     observaciones: ''
   });
 
-  // NUEVA FUNCIÓN: RENDERIZADO VISUAL DE ETIQUETAS (TAGS)
-  const renderTagsViaje = (viaje) => {
+  // FUNCIONES DE TOGGLE (CLICS EN BADGES)
+  const toggleMovimiento = async (viaje) => {
+    try {
+      const nuevoMov = viaje.movimiento === 'Salida' ? 'Regreso' : 'Salida';
+      await updateDoc(doc(db, "viajes", viaje.id), { movimiento: nuevoMov });
+      message.success(`Cambiado a ${nuevoMov}`);
+    } catch (error) {
+      message.error("Error al cambiar movimiento");
+    }
+  };
+
+  const toggleServicio = async (viaje) => {
+    try {
+      const nuevoServ = !viaje.esExportacion;
+      await updateDoc(doc(db, "viajes", viaje.id), { esExportacion: nuevoServ });
+      message.success(`Cambiado a ${nuevoServ ? 'Exportación' : 'Nacional'}`);
+    } catch (error) {
+      message.error("Error al cambiar servicio");
+    }
+  };
+
+  // NUEVA FUNCIÓN: RENDERIZADO VISUAL DE ETIQUETAS INTERACTIVAS
+  const renderTagsViaje = (viaje, isEditable = false) => {
     if (!viaje) return null;
     return (
       <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-        {viaje.movimiento === 'Regreso' ? (
-          <span style={{ fontSize: '10px', background: 'rgba(168, 85, 247, 0.2)', color: '#c084fc', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}><ArrowDown size={10} /> REGRESO</span>
-        ) : (
-          <span style={{ fontSize: '10px', background: 'rgba(59, 130, 246, 0.2)', color: '#60a5fa', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}><ArrowUp size={10} /> SALIDA</span>
-        )}
-        {viaje.esExportacion ? (
-          <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>🇺🇸 EXPORTACIÓN</span>
-        ) : (
-          <span style={{ fontSize: '10px', background: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>🇲🇽 NACIONAL</span>
-        )}
+        <span 
+          onClick={() => isEditable && toggleMovimiento(viaje)}
+          title={isEditable ? "Clic para cambiar Salida/Regreso" : ""}
+          style={{ 
+            cursor: isEditable ? 'pointer' : 'default',
+            fontSize: '10px', 
+            background: viaje.movimiento === 'Regreso' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', 
+            color: viaje.movimiento === 'Regreso' ? '#c084fc' : '#60a5fa', 
+            padding: '2px 6px', 
+            borderRadius: '4px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '2px' 
+          }}
+        >
+          {viaje.movimiento === 'Regreso' ? <><ArrowDown size={10} /> REGRESO</> : <><ArrowUp size={10} /> SALIDA</>}
+        </span>
+        
+        <span 
+          onClick={() => isEditable && toggleServicio(viaje)}
+          title={isEditable ? "Clic para cambiar Exportación/Nacional" : ""}
+          style={{ 
+            cursor: isEditable ? 'pointer' : 'default',
+            fontSize: '10px', 
+            background: viaje.esExportacion ? 'rgba(245, 158, 11, 0.2)' : 'rgba(34, 197, 94, 0.2)', 
+            color: viaje.esExportacion ? '#fbbf24' : '#4ade80', 
+            padding: '2px 6px', 
+            borderRadius: '4px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '2px' 
+          }}
+        >
+          {viaje.esExportacion ? "🇺🇸 EXPORTACIÓN" : "🇲🇽 NACIONAL"}
+        </span>
       </div>
     );
   };
@@ -320,7 +378,6 @@ function App() {
     };
   }, []); 
 
-  // EFFECT PARA CARGAR LOS PUNTOS DE RASTREO EN TIEMPO REAL
   useEffect(() => {
     if (!viajeActivoRastreo || !viajeActivoRastreo.id) return;
     const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"));
@@ -408,27 +465,68 @@ function App() {
     }
   };
 
-  const handleTerminarViaje = async (viajeId) => {
+  // NUEVA LÓGICA DE TERMINAR VIAJE (CON MODAL)
+  const abrirModalTerminar = (viaje) => {
+    setViajeATerminar(viaje);
+    setModoTerminar('ahora');
+    setNuevaFechaFin(dayjs());
+    setNuevaHoraFin(dayjs());
+    setModalTerminarVisible(true);
+  };
+
+  const confirmarTerminarViaje = async () => {
     try {
-      const viajeRef = doc(db, "viajes", viajeId);
+      let fechaIso;
+      if (modoTerminar === 'ahora') {
+          fechaIso = new Date().toISOString();
+      } else {
+          if (!nuevaFechaFin || !nuevaHoraFin) return message.warning("Selecciona fecha y hora de fin");
+          const fechaStr = nuevaFechaFin.format('YYYY-MM-DD');
+          const horaStr = nuevaHoraFin.format('HH:mm');
+          fechaIso = dayjs(`${fechaStr} ${horaStr}`, 'YYYY-MM-DD HH:mm').toISOString();
+      }
+
+      const viajeRef = doc(db, "viajes", viajeATerminar.id);
       await updateDoc(viajeRef, { 
         estatus: 'finalizado',
-        fechaFinalizacion: new Date().toISOString(),
-        fechaFinExacta: new Date().toISOString() // NUEVO: MARCA DE FIN
+        fechaFinalizacion: fechaIso,
+        fechaFinExacta: fechaIso 
       });
 
-      const viajeTerminado = viajes.find(v => v.id === viajeId);
-      if (viajeTerminado) {
-        const registroEnEspera = viajes.find(v => v.unidad === viajeTerminado.unidad && v.estatus === 'espera');
-        if (registroEnEspera) {
-          await deleteDoc(doc(db, "viajes", registroEnEspera.id));
-        }
+      // Limpiar de espera si quedó colgado
+      const registroEnEspera = viajes.find(v => v.unidad === viajeATerminar.unidad && v.estatus === 'espera' && v.id !== viajeATerminar.id);
+      if (registroEnEspera) {
+        await deleteDoc(doc(db, "viajes", registroEnEspera.id));
       }
 
       message.success("Viaje finalizado correctamente");
+      setModalTerminarVisible(false);
     } catch (e) {
       console.error("Error al terminar viaje:", e);
       message.error("No se pudo finalizar el viaje");
+    }
+  };
+
+  // NUEVA LÓGICA DE EDITAR INICIO DE VIAJE (CON LAPICITO)
+  const guardarEdicionInicio = async () => {
+    if (!nuevaFechaInicio || !nuevaHoraInicio) return message.warning("Selecciona fecha y hora");
+    try {
+        const fechaStr = nuevaFechaInicio.format('YYYY-MM-DD');
+        const horaStr = nuevaHoraInicio.format('HH:mm');
+        const ts = dayjs(`${fechaStr} ${horaStr}`).valueOf();
+        const iso = dayjs(`${fechaStr} ${horaStr}`).toISOString();
+
+        await updateDoc(doc(db, "viajes", viajeAEditarInicio.id), {
+            fecha: fechaStr,
+            hora: horaStr,
+            timestampFiltro: ts,
+            fechaInicioExacta: iso
+        });
+        message.success("Inicio del viaje actualizado");
+        setModalEditarInicioVisible(false);
+    } catch (e) {
+        console.error(e);
+        message.error("Error al actualizar inicio");
     }
   };
 
@@ -1408,24 +1506,39 @@ function App() {
                               </Button>
                             </Popconfirm>
 
-                            <Popconfirm
-                              title="¿Finalizar viaje?"
-                              description="¿Estás seguro de que este viaje ha terminado? Pasará al historial."
-                              onConfirm={() => handleTerminarViaje(record.id)}
-                              okText="Sí, terminar"
-                              cancelText="No"
-                              okButtonProps={{ danger: true }}
+                            {/* NUEVO BOTÓN DE TERMINAR */}
+                            <Button 
+                              danger 
+                              size="small" 
+                              onClick={() => abrirModalTerminar(record)}
                             >
-                              <Button danger size="small">
-                                Terminar
-                              </Button>
-                            </Popconfirm>
+                              Terminar
+                            </Button>
                           </div>
                         ) 
                       },
                       { title: 'Fecha', dataIndex: 'fecha' }, 
                       { title: 'Carta porte', dataIndex: 'cp' }, 
-                      { title: 'Hora salida', dataIndex: 'hora' },
+                      { 
+                        title: 'Hora salida', 
+                        dataIndex: 'hora',
+                        render: (text, record) => (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <span>{text}</span>
+                            <Edit3 
+                              size={14} 
+                              style={{ cursor: 'pointer', color: '#1677ff' }} 
+                              title="Editar hora de inicio"
+                              onClick={() => {
+                                setViajeAEditarInicio(record);
+                                setNuevaFechaInicio(record.fecha ? dayjs(record.fecha) : dayjs());
+                                setNuevaHoraInicio(record.hora ? dayjs(record.hora, 'HH:mm') : dayjs());
+                                setModalEditarInicioVisible(true);
+                              }}
+                            />
+                          </div>
+                        )
+                      },
                       { 
                         title: 'Unidad', 
                         dataIndex: 'unidad',
@@ -1767,6 +1880,7 @@ function App() {
                     <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
                   </div>
                   
+                  {/* AUTO-COMPLETAR CORREO AL SELECCIONAR CLIENTE */}
                   <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
                     <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} 
                       onChange={(val) => {
@@ -1863,7 +1977,8 @@ function App() {
                         <span style={{ fontSize: '16px' }}>{nombreUnidad}</span>
                         {(() => {
                            const vActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
-                           return renderTagsViaje(vActivo);
+                           // PASAMOS TRUE PARA QUE SEA EDITABLE
+                           return renderTagsViaje(vActivo, true);
                         })()}
                       </div>
 
@@ -1997,6 +2112,41 @@ function App() {
                         <Button size="small" type="primary" onClick={handleActualizarSello}>Guardar</Button>
                       </div>
                     </div>
+                    {/* NUEVO: EDICIÓN RÁPIDA DE MOVIMIENTO Y SERVICIO */}
+                    <div>
+                       <span style={{ color: '#888' }}>Movimiento:</span> <br/>
+                       <Radio.Group 
+                         size="small" 
+                         value={viajeActivoRastreo.movimiento || 'Salida'} 
+                         onChange={async (e) => {
+                           const val = e.target.value;
+                           await updateDoc(doc(db, "viajes", viajeActivoRastreo.id), { movimiento: val });
+                           setViajeActivoRastreo({...viajeActivoRastreo, movimiento: val});
+                           message.success("Movimiento actualizado");
+                         }}
+                         style={{ marginTop: '2px' }}
+                       >
+                         <Radio.Button value="Salida">Salida</Radio.Button>
+                         <Radio.Button value="Regreso">Regreso</Radio.Button>
+                       </Radio.Group>
+                    </div>
+                    <div>
+                       <span style={{ color: '#888' }}>Servicio:</span> <br/>
+                       <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                         <Switch 
+                           size="small"
+                           checked={viajeActivoRastreo.esExportacion || false} 
+                           onChange={async (checked) => {
+                             await updateDoc(doc(db, "viajes", viajeActivoRastreo.id), { esExportacion: checked });
+                             setViajeActivoRastreo({...viajeActivoRastreo, esExportacion: checked});
+                             message.success("Servicio actualizado");
+                           }}
+                         />
+                         <span style={{ fontSize: '11px', color: viajeActivoRastreo.esExportacion ? '#fbbf24' : '#4ade80', fontWeight: 'bold' }}>
+                           {viajeActivoRastreo.esExportacion ? 'Exportación 🇺🇸' : 'Nacional 🇲🇽'}
+                         </span>
+                       </div>
+                    </div>
                   </div>
                 </div>
 
@@ -2095,6 +2245,85 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* NUEVO MODAL: CONFIRMAR FINALIZACIÓN DEL VIAJE */}
+          <Modal
+            title="Finalizar Viaje"
+            open={modalTerminarVisible}
+            onCancel={() => setModalTerminarVisible(false)}
+            onOk={confirmarTerminarViaje}
+            okText="Finalizar Viaje"
+            cancelText="Cancelar"
+            okButtonProps={{ danger: true }}
+            getPopupContainer={() => document.body}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', padding: '10px 0' }}>
+              <p style={{ margin: 0 }}>Selecciona cuándo concluyó este viaje:</p>
+              <Radio.Group value={modoTerminar} onChange={e => setModoTerminar(e.target.value)}>
+                <Space direction="vertical">
+                  <Radio value="ahora">Terminó en este preciso momento</Radio>
+                  <Radio value="personalizado">Ingresar una fecha y hora exacta pasada</Radio>
+                </Space>
+              </Radio.Group>
+              
+              {modoTerminar === 'personalizado' && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '5px', background: 'rgba(0,0,0,0.05)', padding: '15px', borderRadius: '8px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#888' }}>Fecha de llegada</label>
+                    <DatePicker 
+                      value={nuevaFechaFin} 
+                      onChange={setNuevaFechaFin} 
+                      style={{ width: '100%' }}
+                      getPopupContainer={t => t.parentNode}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#888' }}>Hora de llegada</label>
+                    <TimePicker 
+                      format="HH:mm" 
+                      value={nuevaHoraFin} 
+                      onChange={setNuevaHoraFin} 
+                      style={{ width: '100%' }}
+                      getPopupContainer={t => t.parentNode}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </Modal>
+
+          {/* NUEVO MODAL: EDITAR INICIO DE VIAJE */}
+          <Modal
+            title={`Editar Inicio: ${viajeAEditarInicio?.unidad}`}
+            open={modalEditarInicioVisible}
+            onCancel={() => setModalEditarInicioVisible(false)}
+            onOk={guardarEdicionInicio}
+            okText="Guardar Cambios"
+            cancelText="Cancelar"
+            getPopupContainer={() => document.body}
+          >
+            <div style={{ display: 'flex', gap: '15px', padding: '20px 0' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Nueva Fecha de Salida:</label>
+                <DatePicker 
+                  value={nuevaFechaInicio} 
+                  onChange={setNuevaFechaInicio} 
+                  style={{ width: '100%' }} 
+                  getPopupContainer={t => t.parentNode}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Nueva Hora de Salida:</label>
+                <TimePicker 
+                  format="HH:mm" 
+                  value={nuevaHoraInicio} 
+                  onChange={setNuevaHoraInicio} 
+                  style={{ width: '100%' }} 
+                  getPopupContainer={t => t.parentNode}
+                />
+              </div>
+            </div>
+          </Modal>
 
         </div>
       </div>
