@@ -1,308 +1,71 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, X, Truck, Clock, Warehouse, Trash2, Download, Search, Edit3, Check, ArrowUp, ArrowDown } from 'lucide-react';
-import { DatePicker, TimePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Modal, Radio, Alert, Checkbox, Space, Switch } from 'antd'; 
+// Se agregó 'Trash2' a la lista de imports de lucide-react
+import { Home, History, FileText, Settings, Truck, Clock, Warehouse, Search, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
+import { DatePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd'; 
 import { db } from './firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import dayjs from 'dayjs'; // Importante para la edición de fechas
+import { collection, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
+import dayjs from 'dayjs';
 import 'antd/dist/reset.css';
 
-// NUEVAS IMPORTACIONES PARA EXCEL PROFESIONAL
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+// IMPORTACIÓN DE COMPONENTES Y SERVICIOS MODULARES
+import HistorialViaje from './components/HistorialViaje';
+import ModalNuevoViaje from './components/ModalNuevoViaje';
+import ModalBitacora from './components/ModalBitacora';
+import ModalRastreoEspecial from './components/ModalRastreoEspecial';
+import ModalMotivoDeshabilitar from './components/ModalMotivoDeshabilitar';
+import ModalTerminarViaje from './components/ModalTerminarViaje';
 
 const { Option } = Select;
 const { Panel } = Collapse;
-const { RangePicker } = DatePicker; // NUEVO: Extraemos RangePicker para los filtros
-
-// FUNCIÓN ACTUALIZADA: ENVÍA LOS DATOS DIRECTO A LA API DE VERCEL
-const enviarConBrevo = async (destinatarios, asunto, contenidoHtml) => {
-  try {
-    const response = await fetch('/api/send-email', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        to: destinatarios, // Nodemailer acepta directamente el string separado por comas
-        subject: asunto,
-        html: contenidoHtml
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Error en el envío con el servidor');
-    }
-  } catch (error) {
-    console.error("Error conectando al servidor:", error);
-    throw error;
-  }
-};
-
-// NUEVO COMPONENTE: LÍNEA DE TIEMPO EXPANDIBLE CON EDICIÓN (VISUALIDAD CORREGIDA)
-const HistorialViaje = ({ viaje }) => {
-  const [puntos, setPuntos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editandoTiempo, setEditandoTiempo] = useState(null); // 'inicio' o 'fin'
-  const [nuevoValor, setNuevoValor] = useState(null);
-
-  useEffect(() => {
-    // MODIFICADO: Eliminado el orderBy de Firebase para ordenar localmente de forma precisa combinando fecha y hora
-    const q = query(collection(db, "viajes", viaje.id, "puntos_revision"));
-    const unsub = onSnapshot(q, (snap) => {
-      const docsOrdenados = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
-        return dayjs(`${a.fecha} ${a.hora}`).valueOf() - dayjs(`${b.fecha} ${b.hora}`).valueOf();
-      });
-      setPuntos(docsOrdenados);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [viaje.id]);
-
-  const guardarCambioTiempo = async () => {
-    if (!nuevoValor) return setEditandoTiempo(null);
-    try {
-      const campo = editandoTiempo === 'inicio' ? 'fechaInicioExacta' : 'fechaFinExacta';
-      await updateDoc(doc(db, "viajes", viaje.id), {
-        [campo]: nuevoValor.toISOString()
-      });
-      message.success("Tiempo actualizado correctamente");
-      setEditandoTiempo(null);
-    } catch (e) {
-      message.error("No se pudo actualizar el tiempo");
-    }
-  };
-
-  return (
-    <div style={{ padding: '20px 30px', background: '#141414', border: '1px solid #333', borderRadius: '8px', margin: '10px 0' }}>
-      
-      {/* SECCIÓN DE INICIO DE VIAJE */}
-      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(74, 222, 128, 0.1)', padding: '10px', borderRadius: '6px' }}>
-        <div style={{ fontSize: '15px', color: '#4ade80' }}>
-          🚀 <b>Inicio de viaje:</b> {viaje.fechaInicioExacta ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX') : 'No registrada'}
-        </div>
-        <div>
-          {editandoTiempo === 'inicio' ? (
-            <Space>
-              <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" placeholder="Selecciona fecha y hora" style={{ width: '200px' }}/>
-              <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo}>Guardar</Button>
-              <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
-            </Space>
-          ) : (
-            <Button size="small" type="default" icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('inicio'); setNuevoValor(viaje.fechaInicioExacta ? dayjs(viaje.fechaInicioExacta) : null); }}>
-              Editar Inicio
-            </Button>
-          )}
-        </div>
-      </div>
-
-      <Table
-        dataSource={puntos}
-        rowKey="id"
-        size="small"
-        pagination={false}
-        loading={loading}
-        columns={[
-          { title: 'Fecha', dataIndex: 'fecha', width: 90 },
-          { title: 'Hora', dataIndex: 'hora', width: 70 },
-          { title: 'Ubicación', dataIndex: 'ubicacion' },
-          { title: 'Estatus', dataIndex: 'estatus' },
-          { title: 'Velocidad', dataIndex: 'velocidad' },
-          { title: 'Lugar', dataIndex: 'lugar' },
-          { title: 'Observaciones', dataIndex: 'observaciones' },
-          { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Mapa</a> : '-' }
-        ]}
-        locale={{ emptyText: <Empty description="Sin movimientos en bitácora" /> }}
-      />
-
-      {/* SECCIÓN DE FIN DE VIAJE */}
-      {(viaje.estatus === 'finalizado' || viaje.fechaFinExacta) && (
-        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(248, 113, 113, 0.1)', padding: '10px', borderRadius: '6px' }}>
-          <div style={{ fontSize: '15px', color: '#f87171' }}>
-            🏁 <b>Viaje finalizado:</b> {viaje.fechaFinExacta ? new Date(viaje.fechaFinExacta).toLocaleString('es-MX') : 'Pendiente de cierre'}
-          </div>
-          <div>
-            {editandoTiempo === 'fin' ? (
-              <Space>
-                <DatePicker showTime value={nuevoValor} onChange={(v) => setNuevoValor(v)} size="small" style={{ width: '200px' }}/>
-                <Button type="primary" size="small" icon={<Check size={14}/>} onClick={guardarCambioTiempo}>Guardar</Button>
-                <Button size="small" icon={<X size={14}/>} onClick={() => setEditandoTiempo(null)} />
-              </Space>
-            ) : (
-              <Button size="small" type="default" danger icon={<Edit3 size={14}/>} onClick={() => { setEditandoTiempo('fin'); setNuevoValor(viaje.fechaFinExacta ? dayjs(viaje.fechaFinExacta) : null); }}>
-                Editar Fin
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+const { RangePicker } = DatePicker;
 
 function App() {
   const [vistaActual, setVistaActual] = useState('inicio');
   const [pestañaActiva, setPestañaActiva] = useState('viajes');
-  const [mostrarModalNuevoViaje, setMostrarModalNuevoViaje] = useState(false);
-  const [mostrarModalBitacora, setMostrarModalBitacora] = useState(false);
-  const [cargandoViaje, setCargandoViaje] = useState(false); 
-
+  
+  // ESTADOS DE DATOS
   const [unidades, setUnidades] = useState([]);
   const [choferes, setChoferes] = useState([]);
   const [clientes, setClientes] = useState([]);
-  const [viajes, setViajes] = useState([]); 
+  const [viajes, setViajes] = useState([]);
   const [reportes, setReportes] = useState([]); 
+  const [sugerencias, setSugerencias] = useState({ estatus: [], ubicacion: [], velocidad: [], lugar: [], caja: [], origen: [], destino: [] });
 
-  const [bannerBitacora, setBannerBitacora] = useState({ visible: false, mensaje: '', tipo: 'success' });
+  // ESTADOS DE MODALES
+  const [mostrarModalNuevoViaje, setMostrarModalNuevoViaje] = useState(false);
+  const [mostrarModalBitacora, setMostrarModalBitacora] = useState(false);
+  const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
+  const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
+  const [modalTerminarVisible, setModalTerminarVisible] = useState(false);
 
-  // ESTADOS PARA MODO EDICIÓN
+  // ESTADOS DE SELECCIÓN Y EDICIÓN
+  const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
+  const [puntosRevision, setPuntosRevision] = useState([]);
+  const [unidadAfectada, setUnidadAfectada] = useState(null);
+  const [viajeATerminar, setViajeATerminar] = useState(null);
+  const [selloActual, setSelloActual] = useState('');
+  const [motivoSeleccionado, setMotivoSeleccionado] = useState('Taller');
+  
+  // ESTADOS CONFIGURACION
   const [editandoId, setEditandoId] = useState(null);
   const [tipoEdicion, setTipoEdicion] = useState(null);
-
-  // ESTADOS PARA NUEVOS MODALES DE EDICIÓN DE TIEMPOS EN TABLA
-  const [modalTerminarVisible, setModalTerminarVisible] = useState(false);
-  const [viajeATerminar, setViajeATerminar] = useState(null);
-  const [modoTerminar, setModoTerminar] = useState('ahora'); 
-  const [nuevaFechaFin, setNuevaFechaFin] = useState(null);
-  const [nuevaHoraFin, setNuevaHoraFin] = useState(null);
-
-  const [modalEditarInicioVisible, setModalEditarInicioVisible] = useState(false);
-  const [viajeAEditarInicio, setViajeAEditarInicio] = useState(null);
-  const [nuevaFechaInicio, setNuevaFechaInicio] = useState(null);
-  const [nuevaHoraInicio, setNuevaHoraInicio] = useState(null);
-
-  // ESTADOS PARA BÚSQUEDA Y FILTROS EN REPORTES
-  const [textoBusqueda, setTextoBusqueda] = useState('');
-  const [rangoFechas, setRangoFechas] = useState(null);
-  const [filtroMovimiento, setFiltroMovimiento] = useState('Todos');
-  const [filtroServicio, setFiltroServicio] = useState('Todos');
-
-  const [sugerencias, setSugerencias] = useState({
-    estatus: [],
-    ubicacion: [],
-    velocidad: [],
-    lugar: [],
-    caja: [],
-    origen: [],
-    destino: []
-  });
-
-  const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
-  const [unidadAfectada, setUnidadAfectada] = useState(null);
-  const [motivoSeleccionado, setMotivoSeleccionado] = useState('Taller');
-
-  const [datosNuevoViaje, setDatosNuevoViaje] = useState({
-    fecha: null,
-    cp: '',
-    hora: null,
-    unidad: undefined,
-    chofer: undefined,
-    caja: '',
-    cliente: undefined,
-    origen: '',
-    destino: '',
-    correoEnvio: '',
-    enviarACliente: true,
-    sello: '',
-    movimiento: 'Salida',      
-    esExportacion: false       
-  });
-
-  const [unidadesSeleccionadasBitacora, setUnidadesSeleccionadasBitacora] = useState([]);
-  const [datosBitacora, setDatosBitacora] = useState({}); 
-
   const [nuevoVehiculo, setNuevoVehiculo] = useState('');
   const [nuevoChofer, setNuevoChofer] = useState('');
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // ESTADOS PARA RASTREO ESPECIAL
-  const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
-  const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
-  const [puntosRevision, setPuntosRevision] = useState([]);
-  const [selloActual, setSelloActual] = useState('');
-  const [datosNuevoPunto, setDatosNuevoPunto] = useState({
-    fecha: null,
-    hora: null,
-    ubicacion: '',
-    estatus: '',
-    velocidad: '', 
-    lugar: '',     
-    link: '',      
-    observaciones: ''
-  });
+  // ESTADOS REPORTES
+  const [textoBusqueda, setTextoBusqueda] = useState('');
+  const [rangoFechas, setRangoFechas] = useState(null);
+  const [filtroMovimiento, setFiltroMovimiento] = useState('Todos');
+  const [filtroServicio, setFiltroServicio] = useState('Todos');
 
-  // FUNCIONES DE TOGGLE (CLICS EN BADGES)
-  const toggleMovimiento = async (viaje) => {
-    try {
-      const nuevoMov = viaje.movimiento === 'Salida' ? 'Regreso' : 'Salida';
-      await updateDoc(doc(db, "viajes", viaje.id), { movimiento: nuevoMov });
-      message.success(`Cambiado a ${nuevoMov}`);
-    } catch (error) {
-      message.error("Error al cambiar movimiento");
-    }
-  };
-
-  const toggleServicio = async (viaje) => {
-    try {
-      const nuevoServ = !viaje.esExportacion;
-      await updateDoc(doc(db, "viajes", viaje.id), { esExportacion: nuevoServ });
-      message.success(`Cambiado a ${nuevoServ ? 'Exportación' : 'Nacional'}`);
-    } catch (error) {
-      message.error("Error al cambiar servicio");
-    }
-  };
-
-  // NUEVA FUNCIÓN: RENDERIZADO VISUAL DE ETIQUETAS INTERACTIVAS
-  const renderTagsViaje = (viaje, isEditable = false) => {
-    if (!viaje) return null;
-    return (
-      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
-        <span 
-          onClick={() => isEditable && toggleMovimiento(viaje)}
-          title={isEditable ? "Clic para cambiar Salida/Regreso" : ""}
-          style={{ 
-            cursor: isEditable ? 'pointer' : 'default',
-            fontSize: '10px', 
-            background: viaje.movimiento === 'Regreso' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', 
-            color: viaje.movimiento === 'Regreso' ? '#c084fc' : '#60a5fa', 
-            padding: '2px 6px', 
-            borderRadius: '4px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '2px' 
-          }}
-        >
-          {viaje.movimiento === 'Regreso' ? <><ArrowDown size={10} /> REGRESO</> : <><ArrowUp size={10} /> SALIDA</>}
-        </span>
-        
-        <span 
-          onClick={() => isEditable && toggleServicio(viaje)}
-          title={isEditable ? "Clic para cambiar Exportación/Nacional" : ""}
-          style={{ 
-            cursor: isEditable ? 'pointer' : 'default',
-            fontSize: '10px', 
-            background: viaje.esExportacion ? 'rgba(245, 158, 11, 0.2)' : 'rgba(34, 197, 94, 0.2)', 
-            color: viaje.esExportacion ? '#fbbf24' : '#4ade80', 
-            padding: '2px 6px', 
-            borderRadius: '4px', 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '2px' 
-          }}
-        >
-          {viaje.esExportacion ? "🇺🇸 EXPORTACIÓN" : "🇲🇽 NACIONAL"}
-        </span>
-      </div>
-    );
-  };
-
+  // FUNCIONES DE CARGA Y FIREBASE
   const cargarSugerencias = async () => {
     try {
       const snap = await getDocs(collection(db, "sugerencias_menu"));
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      
-      const organizadas = {
+      setSugerencias({
         estatus: docs.filter(d => d.categoria === 'estatus'),
         ubicacion: docs.filter(d => d.categoria === 'ubicacion'),
         velocidad: docs.filter(d => d.categoria === 'velocidad'),
@@ -310,26 +73,58 @@ function App() {
         caja: docs.filter(d => d.categoria === 'caja'),
         origen: docs.filter(d => d.categoria === 'origen'),
         destino: docs.filter(d => d.categoria === 'destino')
-      };
-      setSugerencias(organizadas);
+      });
     } catch (e) {
       console.error("Error cargando sugerencias:", e);
     }
   };
 
+  useEffect(() => {
+    cargarSugerencias();
+    const unsubVehiculos = onSnapshot(collection(db, "vehiculos"), (snap) => setUnidades(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubChoferes = onSnapshot(collection(db, "choferes"), (snap) => setChoferes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubClientes = onSnapshot(collection(db, "clientes"), (snap) => setClientes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubViajes = onSnapshot(query(collection(db, "viajes"), orderBy("fechaCreacion", "desc"), limit(50)), (snap) => setViajes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubReportes = onSnapshot(query(collection(db, "reportes"), orderBy("fechaEnvio", "desc"), limit(100)), (snap) => setReportes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    return () => { unsubVehiculos(); unsubChoferes(); unsubClientes(); unsubViajes(); unsubReportes(); };
+  }, []);
+
+  useEffect(() => {
+    if (!viajeActivoRastreo?.id) return;
+    const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"));
+    const unsubscribe = onSnapshot(qPuntos, (snap) => {
+      const docsOrdenados = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => dayjs(`${a.fecha} ${a.hora}`).valueOf() - dayjs(`${b.fecha} ${b.hora}`).valueOf());
+      setPuntosRevision(docsOrdenados);
+    });
+    return () => unsubscribe();
+  }, [viajeActivoRastreo]);
+
+  // FUNCIONES DE LÓGICA Y EVENTOS
+  const toggleMovimiento = async (viaje) => {
+    try {
+      const nuevoMov = viaje.movimiento === 'Salida' ? 'Regreso' : 'Salida';
+      await updateDoc(doc(db, "viajes", viaje.id), { movimiento: nuevoMov });
+      message.success(`Cambiado a ${nuevoMov}`);
+    } catch (error) { message.error("Error al cambiar movimiento"); }
+  };
+
+  const toggleServicio = async (viaje) => {
+    try {
+      const nuevoServ = !viaje.esExportacion;
+      await updateDoc(doc(db, "viajes", viaje.id), { esExportacion: nuevoServ });
+      message.success(`Cambiado a ${nuevoServ ? 'Exportación' : 'Nacional'}`);
+    } catch (error) { message.error("Error al cambiar servicio"); }
+  };
+
   const guardarSugerenciaAutomatica = async (categoria, valor) => {
     if (!valor || valor.trim() === '') return;
-    const existe = sugerencias[categoria].some(s => s.valor.toLowerCase() === valor.toLowerCase());
+    const existe = sugerencias[categoria]?.some(s => s.valor.toLowerCase() === valor.toLowerCase());
     if (!existe) {
       try {
-        await addDoc(collection(db, "sugerencias_menu"), {
-          categoria,
-          valor: valor.trim()
-        });
+        await addDoc(collection(db, "sugerencias_menu"), { categoria, valor: valor.trim() });
         cargarSugerencias();
-      } catch (e) {
-        console.error("Error al guardar sugerencia:", e);
-      }
+      } catch (e) { console.error("Error guardando sugerencia"); }
     }
   };
 
@@ -339,219 +134,31 @@ function App() {
       await deleteDoc(doc(db, "sugerencias_menu", id));
       cargarSugerencias();
       message.success("Sugerencia eliminada");
-    } catch (e) {
-      message.error("Error al eliminar");
-    }
+    } catch (e) { message.error("Error al eliminar"); }
   };
 
-  useEffect(() => {
-    cargarSugerencias();
-
-    const unsubVehiculos = onSnapshot(collection(db, "vehiculos"), (snap) => {
-      setUnidades(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => console.error("Error unidades en tiempo real:", error));
-
-    const unsubChoferes = onSnapshot(collection(db, "choferes"), (snap) => {
-      setChoferes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => console.error("Error choferes en tiempo real:", error));
-
-    const unsubClientes = onSnapshot(collection(db, "clientes"), (snap) => {
-      setClientes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => console.error("Error clientes en tiempo real:", error));
-
-    const qViajes = query(collection(db, "viajes"), orderBy("fechaCreacion", "desc"), limit(50));
-    const unsubViajes = onSnapshot(qViajes, (snap) => {
-      setViajes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => console.error("Error viajes en tiempo real:", error));
-
-    const qReportes = query(collection(db, "reportes"), orderBy("fechaEnvio", "desc"), limit(100));
-    const unsubReportes = onSnapshot(qReportes, (snap) => {
-      setReportes(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => console.error("Error reportes en tiempo real:", error));
-
-    return () => {
-      unsubVehiculos();
-      unsubChoferes();
-      unsubClientes();
-      unsubViajes();
-      unsubReportes();
-    };
-  }, []); 
-
-  useEffect(() => {
-    if (!viajeActivoRastreo || !viajeActivoRastreo.id) return;
-    const qPuntos = query(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"));
-    const unsubscribe = onSnapshot(qPuntos, (snap) => {
-      const docsOrdenados = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => {
-        return dayjs(`${a.fecha} ${a.hora}`).valueOf() - dayjs(`${b.fecha} ${b.hora}`).valueOf();
-      });
-      setPuntosRevision(docsOrdenados);
-    });
-    return () => unsubscribe();
-  }, [viajeActivoRastreo]);
-
-  const prepararEdicion = (coleccion, record) => {
-    setEditandoId(record.id);
-    setTipoEdicion(coleccion);
-    if (coleccion === 'vehiculos') setNuevoVehiculo(record.nombre);
-    if (coleccion === 'choferes') setNuevoChofer(record.nombre);
-    if (coleccion === 'clientes') {
-      setNuevoCliente(record.nombre);
-      setCorreoNuevo(record.correo || '');
-    }
-  };
-
-  const cancelarEdicion = () => {
-    setEditandoId(null);
-    setTipoEdicion(null);
-    setNuevoVehiculo('');
-    setNuevoChofer('');
-    setNuevoCliente('');
-    setCorreoNuevo('');
-  };
-
-  const handleAgregar = async (coleccion) => {
-    let objetoNuevo = {};
-    
+  const handleMoverAEspera = async (viajeId) => {
     try {
-      if (coleccion === 'vehiculos') {
-        if (!nuevoVehiculo) return;
-        objetoNuevo = { nombre: nuevoVehiculo };
-        if (editandoId && tipoEdicion === 'vehiculos') {
-          await updateDoc(doc(db, "vehiculos", editandoId), objetoNuevo);
-          message.success("Vehículo actualizado");
-        } else {
-          await addDoc(collection(db, "vehiculos"), { ...objetoNuevo, estado: 'Listo' });
-          message.success("Vehículo agregado");
-        }
-        setNuevoVehiculo('');
-      } 
-      else if (coleccion === 'choferes') {
-        if (!nuevoChofer) return;
-        objetoNuevo = { nombre: nuevoChofer };
-        if (editandoId && tipoEdicion === 'choferes') {
-          await updateDoc(doc(db, "choferes", editandoId), objetoNuevo);
-          message.success("Chofer actualizado");
-        } else {
-          await addDoc(collection(db, "choferes"), objetoNuevo);
-          message.success("Chofer agregado");
-        }
-        setNuevoChofer('');
-      } 
-      else if (coleccion === 'clientes') {
-        if (!nuevoCliente) return;
-        objetoNuevo = { nombre: nuevoCliente, correo: correoNuevo };
-        if (editandoId && tipoEdicion === 'clientes') {
-          await updateDoc(doc(db, "clientes", editandoId), objetoNuevo);
-          message.success("Cliente actualizado");
-        } else {
-          await addDoc(collection(db, "clientes"), objetoNuevo);
-          message.success("Cliente agregado");
-        }
-        setNuevoCliente('');
-        setCorreoNuevo('');
-      }
-      setEditandoId(null);
-      setTipoEdicion(null);
-    } catch (e) {
-      console.error("Error en handleAgregar/Editar:", e);
-      message.error("Error al procesar la solicitud");
-    }
-  };
-
-  const handleEliminar = async (coleccion, id) => {
-    if (window.confirm("¿Deseas eliminar este registro?")) {
-      await deleteDoc(doc(db, coleccion, id));
-    }
-  };
-
-  // NUEVA LÓGICA DE TERMINAR VIAJE (CON MODAL)
-  const abrirModalTerminar = (viaje) => {
-    setViajeATerminar(viaje);
-    setModoTerminar('ahora');
-    setNuevaFechaFin(dayjs());
-    setNuevaHoraFin(dayjs());
-    setModalTerminarVisible(true);
-  };
-
-  const confirmarTerminarViaje = async () => {
-    try {
-      let fechaIso;
-      if (modoTerminar === 'ahora') {
-          fechaIso = new Date().toISOString();
-      } else {
-          if (!nuevaFechaFin || !nuevaHoraFin) return message.warning("Selecciona fecha y hora de fin");
-          const fechaStr = nuevaFechaFin.format('YYYY-MM-DD');
-          const horaStr = nuevaHoraFin.format('HH:mm');
-          fechaIso = dayjs(`${fechaStr} ${horaStr}`, 'YYYY-MM-DD HH:mm').toISOString();
-      }
-
-      const viajeRef = doc(db, "viajes", viajeATerminar.id);
-      await updateDoc(viajeRef, { 
-        estatus: 'finalizado',
-        fechaFinalizacion: fechaIso,
-        fechaFinExacta: fechaIso 
-      });
-
-      // Limpiar de espera si quedó colgado
-      const registroEnEspera = viajes.find(v => v.unidad === viajeATerminar.unidad && v.estatus === 'espera' && v.id !== viajeATerminar.id);
-      if (registroEnEspera) {
-        await deleteDoc(doc(db, "viajes", registroEnEspera.id));
-      }
-
-      message.success("Viaje finalizado correctamente");
-      setModalTerminarVisible(false);
-    } catch (e) {
-      console.error("Error al terminar viaje:", e);
-      message.error("No se pudo finalizar el viaje");
-    }
-  };
-
-  // NUEVA LÓGICA DE EDITAR INICIO DE VIAJE (CON LAPICITO)
-  const guardarEdicionInicio = async () => {
-    if (!nuevaFechaInicio || !nuevaHoraInicio) return message.warning("Selecciona fecha y hora");
-    try {
-        const fechaStr = nuevaFechaInicio.format('YYYY-MM-DD');
-        const horaStr = nuevaHoraInicio.format('HH:mm');
-        const ts = dayjs(`${fechaStr} ${horaStr}`).valueOf();
-        const iso = dayjs(`${fechaStr} ${horaStr}`).toISOString();
-
-        await updateDoc(doc(db, "viajes", viajeAEditarInicio.id), {
-            fecha: fechaStr,
-            hora: horaStr,
-            timestampFiltro: ts,
-            fechaInicioExacta: iso
-        });
-        message.success("Inicio del viaje actualizado");
-        setModalEditarInicioVisible(false);
-    } catch (e) {
-        console.error(e);
-        message.error("Error al actualizar inicio");
-    }
+      await updateDoc(doc(db, "viajes", viajeId), { estatus: 'espera', fechaFinalizacion: new Date().toISOString() });
+      message.success("Viaje enviado a espera de carga");
+    } catch (e) { message.error("No se pudo actualizar el viaje"); }
   };
 
   const handleEliminarEspera = async (id) => {
     try {
       await deleteDoc(doc(db, "viajes", id));
       message.success("Unidad removida de espera correctamente");
-    } catch (e) {
-      console.error("Error al eliminar de espera:", e);
-      message.error("No se pudo remover la unidad");
-    }
+    } catch (e) { message.error("No se pudo remover la unidad"); }
   };
 
-  const handleMoverAEspera = async (viajeId) => {
+  const confirmarTerminarViaje = async (fechaIso) => {
     try {
-      const viajeRef = doc(db, "viajes", viajeId);
-      await updateDoc(viajeRef, { 
-        estatus: 'espera',
-        fechaFinalizacion: new Date().toISOString() 
-      });
-      message.success("Viaje enviado a espera de carga");
-    } catch (e) {
-      console.error("Error al enviar viaje a espera:", e);
-      message.error("No se pudo actualizar el viaje");
-    }
+      await updateDoc(doc(db, "viajes", viajeATerminar.id), { estatus: 'finalizado', fechaFinalizacion: fechaIso, fechaFinExacta: fechaIso });
+      const registroEnEspera = viajes.find(v => v.unidad === viajeATerminar.unidad && v.estatus === 'espera' && v.id !== viajeATerminar.id);
+      if (registroEnEspera) await deleteDoc(doc(db, "viajes", registroEnEspera.id));
+      setModalTerminarVisible(false);
+      message.success("Viaje finalizado correctamente");
+    } catch (e) { message.error("No se pudo finalizar el viaje"); }
   };
 
   const handleAccionDisponibilidad = async (record) => {
@@ -562,9 +169,7 @@ function App() {
       try {
         await updateDoc(doc(db, "vehiculos", record.id), { estado: 'Listo' });
         message.success(`Unidad ${record.nombre} habilitada correctamente`);
-      } catch (e) {
-        message.error("Error al habilitar unidad");
-      }
+      } catch (e) { message.error("Error al habilitar unidad"); }
     }
   };
 
@@ -573,876 +178,92 @@ function App() {
       await updateDoc(doc(db, "vehiculos", unidadAfectada.id), { estado: motivoSeleccionado });
       message.warning(`Unidad ${unidadAfectada.nombre} enviada a: ${motivoSeleccionado}`);
       setMostrarModalMotivo(false);
-    } catch (e) {
-      message.error("Error al actualizar estado");
-    }
+    } catch (e) { message.error("Error al actualizar estado"); }
   };
 
-  const handleCrearViaje = async () => {
-    if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer) {
-      return message.warning("Por favor completa Unidad y Chofer");
-    }
-
-    if (datosNuevoViaje.cp && datosNuevoViaje.cp.trim() !== '') {
-      const existeCP = viajes.some(v => v.cp === datosNuevoViaje.cp && v.estatus === 'viajes');
-      if (existeCP) {
-        return message.error("Este número de Carta Porte ya está registrado en un viaje activo.");
-      }
-    }
-
-    if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio && !/\S+@\S+\.\S+/.test(datosNuevoViaje.correoEnvio)) {
-      return message.error("El formato del correo electrónico no es válido");
-    }
-
-    setCargandoViaje(true);
-
-    try {
-      const registroEnEspera = viajes.find(v => v.unidad === datosNuevoViaje.unidad && v.estatus === 'espera');
-      if (registroEnEspera) {
-        await deleteDoc(doc(db, "viajes", registroEnEspera.id));
-      }
-
-      await guardarSugerenciaAutomatica('caja', datosNuevoViaje.caja);
-      await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
-      await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
-
-      const nuevoRegistro = {
-        ...datosNuevoViaje,
-        cp: datosNuevoViaje.cp || 'Pendiente', 
-        fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
-        hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
-        timestampFiltro: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.valueOf() : new Date().getTime(),
-        estatus: 'viajes',
-        sello: datosNuevoViaje.sello ? datosNuevoViaje.sello : 'Pendiente',
-        fechaCreacion: new Date().toISOString(),
-        fechaInicioExacta: new Date().toISOString(),
-        movimiento: datosNuevoViaje.movimiento || 'Salida',
-        esExportacion: datosNuevoViaje.esExportacion || false
-      };
-
-      const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
-
-      const correosInternos = [
-        "t.foraneo@transportesvargas.com",
-        "manuel.ochoa@transportesvargas.com",
-        "monitoreo@transportesvargas.com",
-        "seguridadtransportesvargas@gmail.com",
-        "control@transportesvargas.com",
-        "logistica@transportesvargas.com",
-        "trafico@transportesvargas.com",
-        "seguridad@transportesvargas.com",
-        "seguridad2@transportesvargas.com",
-        "traficovargasdiaz@gmail.com",
-        "silvia@vargasinterlogistics.com"
-      ];
-
-      let listaFinalDestinatarios = [...correosInternos];
-      if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio) {
-        listaFinalDestinatarios.push(datosNuevoViaje.correoEnvio);
-      }
-
-      const destinatariosString = listaFinalDestinatarios.join(", ");
-
-      const tablaNuevoViajeHTML = `
-        <div style="font-family: 'Times New Roman', serif, Arial; color: #000; font-size: 13px;">
-          <p style="text-align: center; font-weight: bold; background-color: #fff2cc; padding: 5px; margin-bottom: 0; width: fit-content; margin-left: auto; margin-right: auto;">Nuevo viaje foraneo</p>
-          <table style="width: 100%; max-width: 800px; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-top: 5px;">
-            <tbody>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px; width: 30%;">Fecha y hora de salida:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.fecha} ${nuevoRegistro.hora}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Tractor:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.unidad || ''}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Remolque:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.caja || ''}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Chofer:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.chofer || ''}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Cliente:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.cliente || ''}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Origen:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.origen || ''}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Destino:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${datosNuevoViaje.destino || ''}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;"># Carta Porte:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.cp}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Sello:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.sello}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Movimiento:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.movimiento}</td>
-              </tr>
-              <tr>
-                <td style="border: 1px solid #000; padding: 5px;">Servicio:</td>
-                <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.esExportacion ? 'Exportación EE.UU.' : 'Nacional'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      `;
-
-      try {
-        const avisoEnvio = message.loading("Procesando creación de viaje...", 0);
-
-        await enviarConBrevo(
-          destinatariosString,
-          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${nuevoRegistro.cp} - ${nuevoRegistro.hora}`,
-          tablaNuevoViajeHTML
-        );
-        
-        avisoEnvio();
-
-        await addDoc(collection(db, "logs_envios"), {
-          viajeId: docRef.id,
-          destinatarios: destinatariosString,
-          unidad: datosNuevoViaje.unidad,
-          fechaEnvio: new Date().toISOString(),
-          tipo: 'Creación de Viaje (Brevo)'
-        });
-
-        message.success(datosNuevoViaje.enviarACliente 
-          ? "Viaje creado y notificado al cliente" 
-          : "Viaje creado y notificado internamente");
-          
-      } catch (mailError) {
-        message.destroy();
-        console.error("Error al enviar notificación Brevo:", mailError);
-        message.error(`Viaje guardado, pero el correo falló: ${mailError.message}`);
-      }
-
-      setMostrarModalNuevoViaje(false);
-      
-      setDatosNuevoViaje({
-        fecha: null, cp: '', hora: null, unidad: undefined, 
-        chofer: undefined, caja: '', cliente: undefined, 
-        origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: '',
-        movimiento: 'Salida', esExportacion: false
-      });
-      
-    } catch (e) {
-      console.error("Error general en handleCrearViaje:", e);
-      message.error("Hubo un problema al procesar el viaje");
-    } finally {
-      setCargandoViaje(false);
-    }
+  // FUNCIONES DE CONFIGURACIÓN
+  const prepararEdicion = (coleccion, record) => {
+    setEditandoId(record.id);
+    setTipoEdicion(coleccion);
+    if (coleccion === 'vehiculos') setNuevoVehiculo(record.nombre);
+    if (coleccion === 'choferes') setNuevoChofer(record.nombre);
+    if (coleccion === 'clientes') { setNuevoCliente(record.nombre); setCorreoNuevo(record.correo || ''); }
   };
 
-  const handleEnviarBitacora = async (unidadNombre) => {
-    const info = datosBitacora[unidadNombre];
-    
-    if (info?.enviarACliente && !info?.correoEnvio) {
-      return message.warning("Por favor ingresa un correo para notificar al cliente");
-    }
-
-    try {
-      message.loading({ content: `Procesando estatus de ${unidadNombre}...`, key: 'envioInd' });
-
-      await guardarSugerenciaAutomatica('estatus', info.estatus);
-      await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
-      await guardarSugerenciaAutomatica('velocidad', info.velocidad);
-      await guardarSugerenciaAutomatica('lugar', info.lugar);
-
-      const viajeActivo = viajes.find(v => v.unidad === unidadNombre && (v.estatus === 'viajes' || v.estatus === 'espera'));
-      const chofer = viajeActivo?.chofer || "N/A";
-      const remolque = viajeActivo?.caja || "N/A";
-
-      if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
-         await updateDoc(doc(db, "viajes", viajeActivo.id), {
-             cliente: info.cliente
-         });
-      }
-
-      const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
-      const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
-      const fechaFormateada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
-      const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
-      const estatusDelDia = `${fechaFormateada} a las ${horaString}`;
-
-      // MODIFICADO: Timestamp ajustado exactamente a lo que se reportó, no a la hora de envío
-      const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
-      const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
-
-      if (viajeActivo) {
-        await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
-          fecha: fechaYYYYMMDD,
-          hora: horaString,
-          ubicacion: info.ubicacion || '',
-          estatus: info.estatus || '',
-          velocidad: info.velocidad || '',
-          cliente: info.cliente || '',
-          lugar: info.lugar || '',
-          link: info.link || '',
-          observaciones: 'Reporte automático de bitácora',
-          timestamp: timestampAjustado
-        });
-      }
-
-      const reporteParaFirebase = {
-        unidad: unidadNombre,
-        ...info,
-        fechaReporte: fechaYYYYMMDD,
-        horaString: horaString,
-        link: info.link || 'No proporcionado',
-        fechaEnvio: new Date().toISOString(),
-      };
-      await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
-
-      if (info?.enviarACliente && info?.correoEnvio) {
-        const contenidoHtmlIndividual = `
-          <div style="font-family: 'Times New Roman', serif; color: #000; font-size: 13px;">
-            <p><b>Reporte de Estatus Individual - Transporte Vargas</b></p>
-            <table border="1" style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
-              <thead>
-                <tr style="background-color: #f2f2f2;">
-                  <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Hora Rep.</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Estatus</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Ubicacion</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Vel/Motivo</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Lugar</th>
-                  <th style="border: 1px solid #000; padding: 5px;">Link</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${unidadNombre}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;">${horaString}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${info.estatus || ''}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${info.ubicacion || ''}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${info.velocidad || ''}</td>
-                  <td style="border: 1px solid #000; padding: 5px;">${info.lugar || ''}</td>
-                  <td style="border: 1px solid #000; padding: 5px; text-align: center;"><a href="${info.link || '#'}">Ver GPS</a></td>
-                </tr>
-              </tbody>
-            </table>
-            <p style="font-size: 10px; color: #666; margin-top: 15px;">Este es un reporte automático generado por el sistema de monitoreo de Transporte Vargas.</p>
-          </div>
-        `;
-
-        await enviarConBrevo(
-          info.correoEnvio,
-          `ESTATUS UNIDAD ${unidadNombre} - ${horaString}`,
-          contenidoHtmlIndividual
-        );
-        
-        await addDoc(collection(db, "logs_envios"), {
-          unidad: unidadNombre,
-          destinatario: info.correoEnvio,
-          fechaEnvio: new Date().toISOString(),
-          tipo: 'Reporte de Bitácora (Cliente)'
-        });
-
-        message.success({ content: `¡Estatus enviado al cliente en formato formal!`, key: 'envioInd' });
-      } else {
-        message.success({ content: `¡Estatus guardado internamente!`, key: 'envioInd' });
-      }
-      
-    } catch (e) {
-      console.error("Error al procesar:", e);
-      message.error({ content: `Fallo el proceso de ${unidadNombre}`, key: 'envioInd' });
-    }
+  const cancelarEdicion = () => {
+    setEditandoId(null); setTipoEdicion(null); setNuevoVehiculo(''); setNuevoChofer(''); setNuevoCliente(''); setCorreoNuevo('');
   };
 
-  const handleEnviarBitacoraMasiva = async () => {
-    if (unidadesSeleccionadasBitacora.length === 0) {
-      return message.warning("No hay unidades seleccionadas para enviar.");
-    }
-
-    const correosInternos = [
-      "t.foraneo@transportesvargas.com",
-      "manuel.ochoa@transportesvargas.com",
-      "monitoreo@transportesvargas.com",
-      "seguridadtransportesvargas@gmail.com",
-      "control@transportesvargas.com",
-      "logistica@transportesvargas.com",
-      "trafico@transportesvargas.com",
-      "seguridad@transportesvargas.com",
-      "seguridad2@transportesvargas.com",
-      "traficovargasdiaz@gmail.com",
-      "silvia@vargasinterlogistics.com"
-    ].join(", ");
-
-    message.loading({ content: "Generando y enviando reporte consolidado a Tráfico...", key: "envioMasivo" });
-
+  const handleAgregar = async (coleccion) => {
+    let objetoNuevo = {};
     try {
-      let filasViajesHTML = "";
-      
-      for (const nombreUnidad of unidadesSeleccionadasBitacora) {
-        const info = datosBitacora[nombreUnidad] || {};
-        
-        await guardarSugerenciaAutomatica('estatus', info.estatus);
-        await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
-        await guardarSugerenciaAutomatica('velocidad', info.velocidad);
-        await guardarSugerenciaAutomatica('lugar', info.lugar);
-
-        const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
-        const chofer = viajeActivo?.chofer || "";
-        const remolque = viajeActivo?.caja || "";
-
-        if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
-            await updateDoc(doc(db, "viajes", viajeActivo.id), {
-                cliente: info.cliente
-            });
-        }
-
-        const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
-        const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
-        
-        // MODIFICADO: Timestamp exacto
-        const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
-        const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
-
-        if (viajeActivo) {
-          await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
-            fecha: fechaYYYYMMDD,
-            hora: horaString,
-            ubicacion: info.ubicacion || '',
-            estatus: info.estatus || '',
-            velocidad: info.velocidad || '',
-            cliente: info.cliente || '',
-            lugar: info.lugar || '',
-            link: info.link || '',
-            observaciones: 'Reporte consolidado automático',
-            timestamp: timestampAjustado
-          });
-        }
-
-        filasViajesHTML += `
-          <tr>
-            <td style="border: 1px solid #000; padding: 5px;">${nombreUnidad}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${fechaCorta} ${horaString}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${info.estatus || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${info.ubicacion || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${info.velocidad || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${info.cliente || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${info.lugar || ''}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${info.link || ''}</td>
-          </tr>
-        `;
+      if (coleccion === 'vehiculos') {
+        if (!nuevoVehiculo) return;
+        objetoNuevo = { nombre: nuevoVehiculo };
+        if (editandoId && tipoEdicion === 'vehiculos') await updateDoc(doc(db, "vehiculos", editandoId), objetoNuevo);
+        else await addDoc(collection(db, "vehiculos"), { ...objetoNuevo, estado: 'Listo' });
+        setNuevoVehiculo('');
+      } else if (coleccion === 'choferes') {
+        if (!nuevoChofer) return;
+        objetoNuevo = { nombre: nuevoChofer };
+        if (editandoId && tipoEdicion === 'choferes') await updateDoc(doc(db, "choferes", editandoId), objetoNuevo);
+        else await addDoc(collection(db, "choferes"), objetoNuevo);
+        setNuevoChofer('');
+      } else if (coleccion === 'clientes') {
+        if (!nuevoCliente) return;
+        objetoNuevo = { nombre: nuevoCliente, correo: correoNuevo };
+        if (editandoId && tipoEdicion === 'clientes') await updateDoc(doc(db, "clientes", editandoId), objetoNuevo);
+        else await addDoc(collection(db, "clientes"), objetoNuevo);
+        setNuevoCliente(''); setCorreoNuevo('');
       }
+      setEditandoId(null); setTipoEdicion(null);
+      message.success("Registro guardado");
+    } catch (e) { message.error("Error al procesar la solicitud"); }
+  };
 
-      const unidadesActivasNombres = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera').map(v => v.unidad);
-      const unidadesEnYarda = unidades.filter(u => !unidadesActivasNombres.includes(u.nombre));
-      
-      let filasYardaHTML = "";
-      unidadesEnYarda.forEach(u => {
-        const estatusMostrar = (u.estado && u.estado !== 'Listo') ? u.estado : 'Sin viaje';
-        filasYardaHTML += `
-          <tr>
-            <td style="border: 1px solid #000; padding: 5px;">${u.nombre}</td>
-            <td style="border: 1px solid #000; padding: 5px;">${estatusMostrar}</td>
-          </tr>
-        `;
-      });
-
-      const tablaConsolidadaHTML = `
-        <div style="font-family: 'Times New Roman', serif; color: #000; font-size: 13px;">
-          <p>Unidades foraneas de viaje o espera de carga:</p>
-          <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px; margin-bottom: 20px;">
-            <thead>
-              <tr style="background-color: #f2f2f2;">
-                <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
-                <th style="border: 1px solid #000; padding: 5px;">Fecha/Hora</th>
-                <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
-                <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
-                <th style="border: 1px solid #000; padding: 5px;">Estatus</th>
-                <th style="border: 1px solid #000; padding: 5px;">Ubicacion</th>
-                <th style="border: 1px solid #000; padding: 5px;">Vel/Motivo</th>
-                <th style="border: 1px solid #000; padding: 5px;">Cliente</th>
-                <th style="border: 1px solid #000; padding: 5px;">Lugar</th>
-                <th style="border: 1px solid #000; padding: 5px;">Link</th>
-              </tr>
-            </thead>
-            <tbody>${filasViajesHTML}</tbody>
-          </table>
-          <p>Unidades en yarda:</p>
-          <table style="width: 250px; border-collapse: collapse; border: 1px solid #000; font-size: 11px;">
-            <thead><tr style="background-color: #f2f2f2;"><th style="border: 1px solid #000; padding: 5px;">Vehiculo</th><th style="border: 1px solid #000; padding: 5px;">Estatus</th></tr></thead>
-            <tbody>${filasYardaHTML}</tbody>
-          </table>
-        </div>
-      `;
-
-      await enviarConBrevo(
-        correosInternos,
-        `ESTATUS UNIDADES FORANEAS - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`,
-        tablaConsolidadaHTML
-      );
-
-      message.success({ content: "¡Reporte consolidado enviado exitosamente a internos!", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: "Envío Consolidado Exitoso vía Brevo. El equipo de Tráfico ya recibió la información.", tipo: 'success' });
-    } catch (error) {
-      console.error("Error en envío masivo Brevo:", error);
-      message.error({ content: "Error crítico al realizar el envío consolidado", key: "envioMasivo" });
-      setBannerBitacora({ visible: true, mensaje: `ERROR CRÍTICO: El reporte consolidado no se envió. ${error.message}`, tipo: 'error' });
-    }
+  const handleEliminar = async (coleccion, id) => {
+    if (window.confirm("¿Deseas eliminar este registro?")) await deleteDoc(doc(db, coleccion, id));
   };
 
   const obtenerDatosTabla = () => {
-    if (pestañaActiva === 'yarda') {
-        return unidades; 
-    }
+    if (pestañaActiva === 'yarda') return unidades; 
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
 
-  const handleInputBitacora = (unidadId, campo, valor) => {
-    setDatosBitacora(prev => ({
-      ...prev,
-      [unidadId]: {
-        ...prev[unidadId],
-        [campo]: valor
-      }
-    }));
-  };
-
-  const handleAbrirBitacoraInteligente = () => {
-    const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera');
-    const nuevasBitacoras = {};
-
-    unidadesEnViaje.forEach(v => {
-      const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
-      const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
-
-      nuevasBitacoras[v.unidad] = {
-        cliente: clienteParaMostrar || undefined, 
-        correoEnvio: clienteInfo?.correo || '',
-        enviarACliente: v.estatus === 'espera' ? false : true 
-      };
-    });
-
-    setDatosBitacora(nuevasBitacoras);
-    setUnidadesSeleccionadasBitacora(unidadesEnViaje.map(v => v.unidad));
-    setMostrarModalBitacora(true);
-  };
-
-  const SelectInteligente = ({ categoria, value, onChange, placeholder }) => (
-    <Select
-      mode="tags"
-      style={{ width: '100%' }}
-      placeholder={placeholder}
-      value={value ? [value] : []}
-      onChange={(vals) => onChange(vals[vals.length - 1] || '')}
-      getPopupContainer={(trigger) => trigger.parentNode}
-    >
-      {sugerencias[categoria].map(s => (
-        <Option key={s.id} value={s.valor}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            {s.valor}
-            <Trash2 
-              size={14} 
-              color="#ff4d4f" 
-              onClick={(e) => eliminarSugerencia(e, s.id)} 
-              style={{ cursor: 'pointer' }}
-            />
-          </div>
-        </Option>
-      ))}
-    </Select>
-  );
-
-  const abrirRastreoEspecial = (viajeRecord) => {
-    setViajeActivoRastreo(viajeRecord);
-    setSelloActual(viajeRecord.sello || 'Pendiente');
-    setMostrarModalRastreo(true);
-  };
-
-  const cerrarRastreoEspecial = () => {
-    setMostrarModalRastreo(false);
-    setViajeActivoRastreo(null);
-    setPuntosRevision([]);
-    setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', velocidad: '', lugar: '', link: '', observaciones: '' }); 
-  };
-
-  const handleActualizarSello = async () => {
-    if (!viajeActivoRastreo) return;
-    try {
-      await updateDoc(doc(db, "viajes", viajeActivoRastreo.id), { sello: selloActual });
-      message.success("Sello actualizado correctamente");
-      setViajeActivoRastreo({ ...viajeActivoRastreo, sello: selloActual });
-    } catch (e) {
-      message.error("Error al actualizar el sello");
-    }
-  };
-
-  const handleAgregarPunto = async () => {
-    if (!datosNuevoPunto.fecha || !datosNuevoPunto.hora || !datosNuevoPunto.ubicacion || !datosNuevoPunto.estatus) {
-      return message.warning("Por favor llena Fecha, Hora, Ubicación y Estatus");
-    }
-
-    try {
-      // MODIFICADO: Timestamp exacto en lugar de new Date().getTime() para no perder el orden nunca más
-      const fechaAgregado = datosNuevoPunto.fecha.format('YYYY-MM-DD');
-      const horaAgregado = datosNuevoPunto.hora.format('HH:mm');
-      const timestampAjustado = dayjs(`${fechaAgregado} ${horaAgregado}`).valueOf();
-
-      await addDoc(collection(db, "viajes", viajeActivoRastreo.id, "puntos_revision"), {
-        fecha: fechaAgregado,
-        hora: horaAgregado,
-        ubicacion: datosNuevoPunto.ubicacion,
-        estatus: datosNuevoPunto.estatus,
-        velocidad: datosNuevoPunto.velocidad || '', 
-        lugar: datosNuevoPunto.lugar || '',         
-        link: datosNuevoPunto.link || '',            
-        observaciones: datosNuevoPunto.observaciones,
-        timestamp: timestampAjustado
-      });
-
-      await guardarSugerenciaAutomatica('ubicacion', datosNuevoPunto.ubicacion);
-      await guardarSugerenciaAutomatica('estatus', datosNuevoPunto.estatus);
-
-      message.success("Punto de revisión agregado exitosamente");
-      setDatosNuevoPunto({ fecha: null, hora: null, ubicacion: '', estatus: '', velocidad: '', lugar: '', link: '', observaciones: '' });
-    } catch (e) {
-      console.error("Error agregando punto:", e);
-      message.error("No se pudo agregar el punto de revisión");
-    }
-  };
-
-  // -------------------------------------------------------------------------
-  // NUEVA FUNCIÓN: DESCARGA DE EXCEL CON FORMATO OFICIAL SEG-T03 (ExcelJS)
-  // -------------------------------------------------------------------------
-  const handleDescargarExcel = async () => {
-    if (!viajeActivoRastreo) return;
-
-    try {
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = workbook.addWorksheet('Rastreo');
-
-      // 1. Configurar anchos de columna
-      worksheet.columns = [
-        { width: 38 }, // A: Fecha y Hora (AUMENTADO para que no aplaste los títulos)
-        { width: 45 }, // B: Ubicacion / Lugar / Chofer
-        { width: 18 }, // C: Estatus / Origen
-        { width: 22 }, // D: Velocidad / Destino
-        { width: 55 }, // E: Observaciones
-        { width: 20 }  // F: Link GPS / Sello
-      ];
-
-      // Tiempos extraídos de tu lógica
-      const fechaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleDateString('es-MX') : '';
-      const horaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : '';
-      const fechaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleDateString('es-MX') : '';
-      const horaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : 'En tránsito';
-
-      // Estilos reutilizables
-      const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } }; // Azul oscuro institucional
-      const subHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }; // Gris claro
-      const borderStyle = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
-
-      // 2. Encabezado principal
-      worksheet.mergeCells('A1:F2');
-      const titleCell = worksheet.getCell('A1');
-      titleCell.value = 'RASTREO ESPECIAL DE VIAJE FORÁNEO';
-      titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
-      titleCell.fill = headerFill;
-      titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-
-      worksheet.addRow([]); // Espacio
-
-      // 3. Información general del viaje
-      const row4 = worksheet.addRow(['Camión:', viajeActivoRastreo.unidad, '', 'Chofer:', viajeActivoRastreo.chofer, '']);
-      const row5 = worksheet.addRow(['Caja:', viajeActivoRastreo.caja, '', 'Origen:', viajeActivoRastreo.origen, '']);
-      const row6 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
-      const row7 = worksheet.addRow(['Carta Porte:', viajeActivoRastreo.cp, '', '', '', '']);
-      
-      const movText = viajeActivoRastreo.movimiento ? viajeActivoRastreo.movimiento.toUpperCase() : 'SALIDA';
-      const expText = viajeActivoRastreo.esExportacion ? 'EXPORTACIÓN EE.UU.' : 'NACIONAL';
-      const row8 = worksheet.addRow(['Movimiento:', movText, '', 'Servicio:', expText, '']);
-      
-      [row4, row5, row6, row7, row8].forEach(row => {
-        row.getCell(1).font = { bold: true };
-        row.getCell(4).font = { bold: true };
-        row.getCell(2).alignment = { horizontal: 'left', wrapText: true };
-        row.getCell(5).alignment = { horizontal: 'left', wrapText: true };
-      });
-
-      // 4. Bloque Salida
-      worksheet.addRow([]); 
-      const depHeader = worksheet.addRow(['INFORMACIÓN DE SALIDA DE ORIGEN', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
-      depHeader.eachCell(cell => {
-         cell.font = { bold: true };
-         cell.fill = subHeaderFill;
-         cell.border = borderStyle;
-         cell.alignment = { horizontal: 'center' };
-      });
-      
-      const depData = worksheet.addRow(['', fechaI, horaI, viajeActivoRastreo.origen, '', viajeActivoRastreo.sello || viajeActivoRastreo.cp]);
-      depData.eachCell(cell => {
-          cell.border = borderStyle;
-          cell.alignment = { horizontal: 'center', wrapText: true };
-      });
-      worksheet.mergeCells(`D${depData.number}:E${depData.number}`); // Unir celdas de lugar
-
-      // 5. Los 17 Puntos
-      worksheet.addRow([]);
-      const inspRow = worksheet.addRow(['Confirmar con el chofer inspección de 17 puntos', '', '', '', 'Sí [  ]', 'No [  ]']);
-      inspRow.font = { bold: true };
-      inspRow.fill = subHeaderFill;
-      worksheet.mergeCells(`A${inspRow.number}:D${inspRow.number}`);
-      inspRow.eachCell(cell => cell.border = borderStyle);
-
-      // 6. Encabezado de la bitácora
-      worksheet.addRow([]);
-      const trackTitle = worksheet.addRow(['RASTREO: LOCALIZACIÓN CADA HORA']);
-      trackTitle.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
-      trackTitle.fill = headerFill;
-      worksheet.mergeCells(`A${trackTitle.number}:F${trackTitle.number}`);
-      trackTitle.alignment = { horizontal: 'center' };
-
-      const headerRow = worksheet.addRow(['FECHA Y HORA', 'UBICACIÓN / LUGAR', 'ESTATUS', 'VELOCIDAD', 'OBSERVACIONES', 'LINK GPS']);
-      headerRow.eachCell(cell => {
-         cell.font = { bold: true };
-         cell.fill = subHeaderFill;
-         cell.border = borderStyle;
-         cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      });
-
-      // ====================================================================
-      // 7. LLENADO DINÁMICO REFINADO: LIMITES EXACTOS Y SIN DUPLICADOS
-      // ====================================================================
-      
-      // A) Preparar los puntos reales con un objeto date para ordenarlos y agruparlos
-      const puntosAProcesar = puntosRevision.map(p => ({
-        ...p,
-        timeObj: dayjs(`${p.fecha} ${p.hora}`),
-        esReal: true // Bandera de captura manual real
-      }));
-
-      // B) Identificar las horas que YA TIENEN reporte (para anular las filas fantasma en esa hora)
-      const horasCubiertas = new Set(puntosAProcesar.map(p => p.timeObj.format('YYYY-MM-DD HH')));
-
-      // C) Determinar límites de tiempo de la bitácora
-      let pivoteInicio = viajeActivoRastreo.fechaInicioExacta ? dayjs(viajeActivoRastreo.fechaInicioExacta) : null;
-      let pivoteFin = viajeActivoRastreo.fechaFinExacta ? dayjs(viajeActivoRastreo.fechaFinExacta) : dayjs(); // Tope hasta ahorita si no ha finalizado
-
-      if (!pivoteInicio && puntosAProcesar.length > 0) {
-        pivoteInicio = puntosAProcesar[0].timeObj;
-      } else if (!pivoteInicio) {
-        pivoteInicio = dayjs();
-      }
-
-      // D) INYECTAR MARCADOR DE INICIO
-      puntosAProcesar.push({
-        fecha: pivoteInicio.format('YYYY-MM-DD'),
-        hora: pivoteInicio.format('HH:mm'),
-        ubicacion: '🚀 --- INICIO DE VIAJE ---',
-        lugar: '-',
-        estatus: '-',
-        velocidad: '-',
-        observaciones: '-',
-        link: '-',
-        timeObj: pivoteInicio.clone().subtract(1, 'millisecond'), // Queda forzosamente arriba de la misma hora
-        esMarcador: true
-      });
-
-      // E) RELLENAR HORAS FANTASMAS (Respetando el límite de fin)
-      let iteradorHora = pivoteInicio.clone().startOf('hour');
-      const finHoraRango = pivoteFin.clone().startOf('hour');
-
-      while (iteradorHora.isBefore(finHoraRango) || iteradorHora.isSame(finHoraRango, 'hour')) {
-        const keyHora = iteradorHora.format('YYYY-MM-DD HH');
-        
-        // Verificamos que la hora no esté cubierta Y que la hora fantasma no rebase la hora de cierre exacta
-        if (!horasCubiertas.has(keyHora) && iteradorHora.isBefore(pivoteFin)) {
-          puntosAProcesar.push({
-            fecha: iteradorHora.format('YYYY-MM-DD'),
-            hora: iteradorHora.format('HH:00'),
-            ubicacion: 'SIN REPORTE',
-            lugar: '-', // Formato guión
-            estatus: '-', // Formato guión
-            velocidad: '-', // Formato guión
-            observaciones: 'Hora sin captura en bitácora',
-            link: '-', // Formato guión
-            timeObj: iteradorHora.clone(),
-            esReal: false
-          });
-        }
-        iteradorHora = iteradorHora.add(1, 'hour');
-      }
-
-      // F) INYECTAR MARCADOR DE FIN (Solo si el viaje ya está cerrado)
-      if (viajeActivoRastreo.estatus === 'finalizado' || viajeActivoRastreo.fechaFinExacta) {
-        puntosAProcesar.push({
-          fecha: pivoteFin.format('YYYY-MM-DD'),
-          hora: pivoteFin.format('HH:mm'),
-          ubicacion: '🏁 --- FIN DE VIAJE ---',
-          lugar: '-',
-          estatus: '-',
-          velocidad: '-',
-          observaciones: '-',
-          link: '-',
-          timeObj: pivoteFin.clone().add(1, 'millisecond'), // Queda forzosamente hasta abajo
-          esMarcador: true
-        });
-      }
-
-      // G) ORDENAR TODO ESTRICTAMENTE POR HORA
-      puntosAProcesar.sort((a, b) => a.timeObj.valueOf() - b.timeObj.valueOf());
-
-      // H) IMPRIMIR EN EXCEL CON FORMATO
-      puntosAProcesar.forEach(p => {
-        const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
-        
-        // Manejo de la columna 'Ubicación' dependiendo del tipo de dato
-        let ubiLugar = '';
-        if (p.esMarcador) {
-            ubiLugar = p.ubicacion;
-        } else if (p.esReal) {
-            ubiLugar = `${p.ubicacion || ''} ${p.lugar && p.lugar !== '-' ? '- ' + p.lugar : ''}`;
-        } else {
-            ubiLugar = p.ubicacion; // Pone "SIN REPORTE"
-        }
-        
-        const dataRow = worksheet.addRow([fechaHora, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
-        
-        dataRow.eachCell((cell, colNumber) => {
-          cell.border = borderStyle;
-          cell.alignment = { 
-              vertical: 'middle', 
-              horizontal: colNumber === 1 || colNumber === 3 || colNumber === 4 ? 'center' : 'left',
-              wrapText: true 
-          };
-
-          // Aplicar estilos a Marcadores y a Horas Fantasma
-          if (p.esMarcador) {
-              cell.font = { bold: true };
-              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; // Gris tenue
-          } else if (!p.esReal && !p.esMarcador) {
-              cell.font = { color: { argb: 'FF888888' }, italic: true }; // Texto gris cursiva para SIN REPORTE
-          }
-        });
-
-        // Manejo elegante del Link GPS (Hyperlink real en Excel) o el guión
-        const linkCell = dataRow.getCell(6);
-        if (p.link && p.link !== '-' && p.link !== '') {
-           linkCell.value = { text: 'Ver Mapa', hyperlink: p.link };
-           linkCell.font = { color: { argb: 'FF0563C1' }, underline: true }; 
-           linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        } else {
-           linkCell.value = '-';
-           linkCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        }
-      });
-      // ====================================================================
-
-      // 8. Bloque Llegada Destino
-      worksheet.addRow([]);
-      const arrHeader = worksheet.addRow(['INFORMACIÓN DE LLEGADA A DESTINO', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
-      arrHeader.eachCell(cell => {
-         cell.font = { bold: true };
-         cell.fill = subHeaderFill;
-         cell.border = borderStyle;
-         cell.alignment = { horizontal: 'center' };
-      });
-
-      const arrData = worksheet.addRow(['', fechaF, horaF, viajeActivoRastreo.destino, '', viajeActivoRastreo.sello || '']);
-      arrData.eachCell(cell => {
-          cell.border = borderStyle;
-          cell.alignment = { horizontal: 'center', wrapText: true };
-      });
-
-      // 9. Generar y descargar (File-Saver)
-      const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.xlsx`);
-      
-    } catch (error) {
-      console.error("Error generando Excel:", error);
-      message.error("Hubo un error al generar el archivo Excel");
-    }
-  };
-
-  // LÓGICA PARA FILTRAR LA PESTAÑA DE REPORTES
-  const viajesFiltradosReportes = viajes.filter(v => {
-    // 1. Filtro por texto
-    const termino = textoBusqueda.toLowerCase();
-    const coincideTexto = !termino || (
-      (v.unidad && v.unidad.toLowerCase().includes(termino)) ||
-      (v.chofer && v.chofer.toLowerCase().includes(termino)) ||
-      (v.cliente && v.cliente.toLowerCase().includes(termino)) ||
-      (v.cp && v.cp.toLowerCase().includes(termino)) ||
-      (v.origen && v.origen.toLowerCase().includes(termino)) ||
-      (v.destino && v.destino.toLowerCase().includes(termino))
+  // ETIQUETAS VISUALES
+  const renderTagsViaje = (viaje, isEditable = false) => {
+    if (!viaje) return null;
+    return (
+      <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+        <span onClick={() => isEditable && toggleMovimiento(viaje)} title={isEditable ? "Clic para cambiar" : ""} style={{ cursor: isEditable ? 'pointer' : 'default', fontSize: '10px', background: viaje.movimiento === 'Regreso' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: viaje.movimiento === 'Regreso' ? '#c084fc' : '#60a5fa', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {viaje.movimiento === 'Regreso' ? <><ArrowDown size={10} /> REGRESO</> : <><ArrowUp size={10} /> SALIDA</>}
+        </span>
+        <span onClick={() => isEditable && toggleServicio(viaje)} title={isEditable ? "Clic para cambiar" : ""} style={{ cursor: isEditable ? 'pointer' : 'default', fontSize: '10px', background: viaje.esExportacion ? 'rgba(245, 158, 11, 0.2)' : 'rgba(34, 197, 94, 0.2)', color: viaje.esExportacion ? '#fbbf24' : '#4ade80', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+          {viaje.esExportacion ? "🇺🇸 EXPORTACIÓN" : "🇲🇽 NACIONAL"}
+        </span>
+      </div>
     );
+  };
 
-    // 2. Filtro por fechas
+  // LÓGICA DE REPORTES
+  const viajesFiltradosReportes = viajes.filter(v => {
+    const termino = textoBusqueda.toLowerCase();
+    const coincideTexto = !termino || ((v.unidad?.toLowerCase().includes(termino)) || (v.chofer?.toLowerCase().includes(termino)) || (v.cliente?.toLowerCase().includes(termino)) || (v.cp?.toLowerCase().includes(termino)) || (v.origen?.toLowerCase().includes(termino)) || (v.destino?.toLowerCase().includes(termino)));
     let coincideFecha = true;
     if (rangoFechas && rangoFechas[0] && rangoFechas[1] && v.fecha) {
       const fechaViaje = dayjs(v.fecha);
-      const fechaInicio = rangoFechas[0].startOf('day');
-      const fechaFin = rangoFechas[1].endOf('day');
-      coincideFecha = fechaViaje.isAfter(fechaInicio) && fechaViaje.isBefore(fechaFin);
+      coincideFecha = fechaViaje.isAfter(rangoFechas[0].startOf('day')) && fechaViaje.isBefore(rangoFechas[1].endOf('day'));
     }
-
-    // 3. Filtro Movimiento y Servicio (NUEVO)
     const coincideMovimiento = filtroMovimiento === 'Todos' || v.movimiento === filtroMovimiento;
-    const coincideServicio = filtroServicio === 'Todos' || 
-                            (filtroServicio === 'Exportacion' && v.esExportacion) || 
-                            (filtroServicio === 'Nacional' && !v.esExportacion);
-
+    const coincideServicio = filtroServicio === 'Todos' || (filtroServicio === 'Exportacion' && v.esExportacion) || (filtroServicio === 'Nacional' && !v.esExportacion);
     return coincideTexto && coincideFecha && coincideMovimiento && coincideServicio;
   });
-
-  const columnasReportes = [
-    { 
-      title: 'Unidad', 
-      dataIndex: 'unidad', 
-      key: 'unidad',
-      render: (text, record) => (
-        <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}>
-          <span style={{fontWeight:'bold'}}>{text}</span>
-          {renderTagsViaje(record)}
-        </div>
-      )
-    },
-    { title: 'Salida', dataIndex: 'salida', key: 'salida' },
-    { title: 'Chofer', dataIndex: 'chofer', key: 'chofer' },
-    { title: 'Caja', dataIndex: 'caja', key: 'caja' },
-    { title: 'Origen', dataIndex: 'origen', key: 'origen' },
-    { title: 'Destino', dataIndex: 'destino', key: 'destino' },
-    { title: 'Llegada', dataIndex: 'llegada', key: 'llegada' },
-    { 
-      title: 'Acciones', 
-      key: 'acciones',
-      render: (_, record) => (
-        <Button 
-          danger 
-          size="small" 
-          onClick={() => abrirRastreoEspecial(record)}
-          style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}
-        >
-          Rastreo especial de viaje
-        </Button>
-      ) 
-    },
-  ];
 
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
         
+        {/* NAVEGACIÓN LATERAL */}
         <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #1a1a1a', padding: '20px 15px' }}>
           <div style={{ color: '#666', fontSize: '13px', fontWeight: 'bold', marginBottom: '40px', paddingLeft: '10px' }}>Bitacora de foraneo</div>
           <nav>
@@ -1453,29 +274,22 @@ function App() {
           </nav>
         </div>
 
+        {/* CONTENIDO PRINCIPAL */}
         <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
           
           {vistaActual === 'inicio' && (
             <>
               <div style={{ textAlign: 'center', marginBottom: '40px' }}>
                 <h1 style={{ fontSize: '75px', margin: '0' }}>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}</h1>
-                <p style={{ color: '#fff', fontSize: '24px' }}>
-                    {obtenerDatosTabla().length === 0 
-                    ? `Ningun registro capturado entre las ${new Date().getHours()}:00 y las ${new Date().getHours()}:59` 
-                    : 'Registros encontrados'}
-                </p>
+                <p style={{ color: '#fff', fontSize: '24px' }}>Registros encontrados</p>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '25px' }}>
-                  <Button type="primary" onClick={handleAbrirBitacoraInteligente} style={{ backgroundColor: '#007bff', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Capturar bitacora</Button>
+                  <Button type="primary" onClick={() => setMostrarModalBitacora(true)} style={{ backgroundColor: '#007bff', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Capturar bitacora</Button>
                   <Button type="primary" danger onClick={() => setMostrarModalNuevoViaje(true)} style={{ backgroundColor: '#dc3545', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Nuevo viaje</Button>
                 </div>
               </div>
 
               <div style={{ display: 'flex', borderBottom: '1px solid #333', marginBottom: '20px', gap: '30px' }}>
-                {[
-                  { id: 'viajes', label: 'Viajes activos', icon: <Truck size={16} /> },
-                  { id: 'espera', label: 'Espera de carga', icon: <Clock size={16} /> },
-                  { id: 'yarda', label: 'En yarda', icon: <Warehouse size={16} /> }
-                ].map(t => (
+                {[{ id: 'viajes', label: 'Viajes activos', icon: <Truck size={16} /> }, { id: 'espera', label: 'Espera de carga', icon: <Clock size={16} /> }, { id: 'yarda', label: 'En yarda', icon: <Warehouse size={16} /> }].map(t => (
                   <span key={t.id} onClick={() => setPestañaActiva(t.id)} style={{ paddingBottom: '10px', cursor: 'pointer', borderBottom: pestañaActiva === t.id ? '2px solid #3b82f6' : 'none', color: pestañaActiva === t.id ? '#3b82f6' : '#666', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {t.icon} {t.label}
                   </span>
@@ -1484,151 +298,43 @@ function App() {
 
               <div style={{ marginTop: '30px' }}>
                 {pestañaActiva === 'viajes' && (
-                  <Table 
-                    dataSource={obtenerDatosTabla()} 
-                    rowKey="id"
-                    expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
+                  <Table dataSource={obtenerDatosTabla()} rowKey="id" size="small" pagination={false} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes activos en este momento" /> }}
                     columns={[
-                      { 
-                        title: 'Acciones', 
-                        width: 170,
-                        render: (_, record) => (
+                      { title: 'Acciones', width: 170, render: (_, record) => (
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <Popconfirm
-                              title="¿Enviar a espera?"
-                              description="La unidad pasará a la lista de espera de carga."
-                              onConfirm={() => handleMoverAEspera(record.id)}
-                              okText="Confirmar"
-                              cancelText="Cancelar"
-                            >
-                              <Button size="small" style={{ backgroundColor: '#1677ff', color: 'white', border: 'none' }}>
-                                En espera
-                              </Button>
-                            </Popconfirm>
-
-                            {/* NUEVO BOTÓN DE TERMINAR */}
-                            <Button 
-                              danger 
-                              size="small" 
-                              onClick={() => abrirModalTerminar(record)}
-                            >
-                              Terminar
-                            </Button>
-                          </div>
-                        ) 
-                      },
-                      { title: 'Fecha', dataIndex: 'fecha' }, 
-                      { title: 'Carta porte', dataIndex: 'cp' }, 
-                      { 
-                        title: 'Hora salida', 
-                        dataIndex: 'hora',
-                        render: (text, record) => (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                            <span>{text}</span>
-                            <Edit3 
-                              size={14} 
-                              style={{ cursor: 'pointer', color: '#1677ff' }} 
-                              title="Editar hora de inicio"
-                              onClick={() => {
-                                setViajeAEditarInicio(record);
-                                setNuevaFechaInicio(record.fecha ? dayjs(record.fecha) : dayjs());
-                                setNuevaHoraInicio(record.hora ? dayjs(record.hora, 'HH:mm') : dayjs());
-                                setModalEditarInicioVisible(true);
-                              }}
-                            />
+                            <Popconfirm title="¿Enviar a espera?" onConfirm={() => handleMoverAEspera(record.id)} okText="Confirmar" cancelText="Cancelar"><Button size="small" style={{ backgroundColor: '#1677ff', color: 'white', border: 'none' }}>En espera</Button></Popconfirm>
+                            <Button danger size="small" onClick={() => { setViajeATerminar(record); setModalTerminarVisible(true); }}>Terminar</Button>
                           </div>
                         )
                       },
-                      { 
-                        title: 'Unidad', 
-                        dataIndex: 'unidad',
-                        render: (text, record) => (
-                          <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}>
-                            <span style={{fontWeight:'bold'}}>{text}</span>
-                            {renderTagsViaje(record)}
-                          </div>
-                        )
-                      }, 
-                      { title: 'Chofer', dataIndex: 'chofer' }, 
-                      { title: 'Caja', dataIndex: 'caja' },
-                      { title: 'Origen', dataIndex: 'origen' }, 
-                      { title: 'Destino', dataIndex: 'destino' }, 
-                      { title: 'Cliente', dataIndex: 'cliente' }
+                      { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
+                      { title: 'Unidad', dataIndex: 'unidad', render: (text, record) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{text}</span>{renderTagsViaje(record)}</div>) },
+                      { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Cliente', dataIndex: 'cliente' }
                     ]}
-                    size="small" 
-                    pagination={false}
-                    locale={{ emptyText: <Empty description="No hay viajes activos en este momento" /> }}
                   />
                 )}
-
                 {pestañaActiva === 'espera' && (
                   <div style={{ textAlign: 'center', marginTop: '50px' }}>
                     <h2 style={{ fontSize: '32px', marginBottom: '30px' }}>Espera de carga</h2>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '28px', fontWeight: 'bold' }}>
-                      {obtenerDatosTabla().length === 0 ? (
-                         <Empty description="No hay unidades en espera" />
-                      ) : (
-                        obtenerDatosTabla().map(v => (
-                          <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                              <span>{v.unidad}</span>
-                              {renderTagsViaje(v)}
-                            </div>
-                            <Popconfirm
-                              title="¿Borrar de espera?"
-                              description="¿Eliminar esta unidad de la lista de espera?"
-                              onConfirm={() => handleEliminarEspera(v.id)}
-                              okText="Sí, borrar"
-                              cancelText="Cancelar"
-                              okButtonProps={{ danger: true }}
-                            >
-                              <Trash2 size={22} color="#ff4d4f" style={{ cursor: 'pointer' }} />
-                            </Popconfirm>
-                          </div>
-                        ))
-                      )}
+                      {obtenerDatosTabla().length === 0 ? <Empty description="No hay unidades en espera" /> : obtenerDatosTabla().map(v => (
+                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span>{v.unidad}</span>{renderTagsViaje(v)}</div>
+                          <Popconfirm title="¿Borrar de espera?" onConfirm={() => handleEliminarEspera(v.id)} okText="Sí, borrar" cancelText="Cancelar" okButtonProps={{ danger: true }}><Trash2 size={22} color="#ff4d4f" style={{ cursor: 'pointer' }} /></Popconfirm>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
-
                 {pestañaActiva === 'yarda' && (
                   <div style={{ marginTop: '20px' }}>
                     <h2 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '40px' }}>En Yarda</h2>
-                    <Table 
-                      dataSource={obtenerDatosTabla()} 
-                      rowKey="id"
+                    <Table dataSource={obtenerDatosTabla()} rowKey="id" pagination={false} locale={{ emptyText: <Empty description="No hay unidades registradas en yarda" /> }}
                       columns={[
-                        { title: 'Unidad', dataIndex: 'nombre', key: 'nombre' }, 
-                        { 
-                          title: 'Estado', 
-                          dataIndex: 'estado', 
-                          key: 'estado',
-                          render: (est) => (
-                            <span style={{ color: (est === 'Listo' || !est) ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
-                              {est || 'Listo'}
-                            </span>
-                          )
-                        },
-                        { 
-                          title: 'Accion', 
-                          render: (_, record) => (
-                            <Button 
-                              danger={record.estado === 'Listo' || !record.estado}
-                              style={{
-                                backgroundColor: (record.estado === 'Listo' || !record.estado) ? '#8b1a1a' : '#1677ff', 
-                                border: 'none',
-                                color: 'white',
-                                width: '120px'
-                              }}
-                              onClick={() => handleAccionDisponibilidad(record)}
-                            >
-                              {(record.estado === 'Listo' || !record.estado) ? 'Deshabilitar' : 'Habilitar'}
-                            </Button>
-                          ) 
-                        }
+                        { title: 'Unidad', dataIndex: 'nombre' },
+                        { title: 'Estado', dataIndex: 'estado', render: (est) => (<span style={{ color: (est === 'Listo' || !est) ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>{est || 'Listo'}</span>) },
+                        { title: 'Accion', render: (_, record) => (<Button danger={record.estado === 'Listo' || !record.estado} style={{ backgroundColor: (record.estado === 'Listo' || !record.estado) ? '#8b1a1a' : '#1677ff', border: 'none', color: 'white', width: '120px' }} onClick={() => handleAccionDisponibilidad(record)}> {(record.estado === 'Listo' || !record.estado) ? 'Deshabilitar' : 'Habilitar'} </Button>) }
                       ]}
-                      pagination={false}
-                      locale={{ emptyText: <Empty description="No hay unidades registradas en yarda" /> }}
                     />
                   </div>
                 )}
@@ -1639,33 +345,12 @@ function App() {
           {vistaActual === 'historial' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
-              <Table 
-                dataSource={viajes.filter(v => v.estatus === 'finalizado')} 
-                rowKey="id"
-                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
+              <Table dataSource={viajes.filter(v => v.estatus === 'finalizado')} rowKey="id" size="small" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes finalizados aún" /> }}
                 columns={[
-                  { title: 'Fecha', dataIndex: 'fecha' }, 
-                  { title: 'Carta porte', dataIndex: 'cp' }, 
-                  { title: 'Hora salida', dataIndex: 'hora' },
-                  { 
-                    title: 'Unidad', 
-                    dataIndex: 'unidad',
-                    render: (text, record) => (
-                      <div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}>
-                        <span style={{fontWeight:'bold'}}>{text}</span>
-                        {renderTagsViaje(record)}
-                      </div>
-                    )
-                  }, 
-                  { title: 'Chofer', dataIndex: 'chofer' }, 
-                  { title: 'Caja', dataIndex: 'caja' },
-                  { title: 'Origen', dataIndex: 'origen' }, 
-                  { title: 'Destino', dataIndex: 'destino' }, 
-                  { title: 'Cliente', dataIndex: 'cliente' }
+                  { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
+                  { title: 'Unidad', dataIndex: 'unidad', render: (text, record) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{text}</span>{renderTagsViaje(record)}</div>) },
+                  { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Cliente', dataIndex: 'cliente' }
                 ]}
-                size="small"
-                pagination={{ pageSize: 15 }}
-                locale={{ emptyText: <Empty description="No hay viajes finalizados aún" /> }}
               />
             </div>
           )}
@@ -1673,55 +358,18 @@ function App() {
           {vistaActual === 'reportes' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
-              
-              {/* BARRA DE BÚSQUEDA Y FILTROS */}
               <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}>
-                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span>
-                  <Input 
-                    prefix={<Search size={16} color="#666" />} 
-                    placeholder="Buscar por unidad, chofer, cliente, carta porte..." 
-                    value={textoBusqueda}
-                    onChange={(e) => setTextoBusqueda(e.target.value)}
-                    style={{ background: '#262626', border: '1px solid #444', color: '#fff' }}
-                    allowClear
-                  />
-                </div>
-                <div style={{ width: '250px' }}>
-                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span>
-                  <RangePicker 
-                    style={{ width: '100%' }}
-                    value={rangoFechas}
-                    onChange={(dates) => setRangoFechas(dates)}
-                    getPopupContainer={trigger => trigger.parentNode}
-                  />
-                </div>
-                <div style={{ width: '150px' }}>
-                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span>
-                  <Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}>
-                    <Option value="Todos">Todos</Option>
-                    <Option value="Salida">Salida</Option>
-                    <Option value="Regreso">Regreso</Option>
-                  </Select>
-                </div>
-                <div style={{ width: '180px' }}>
-                  <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span>
-                  <Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}>
-                    <Option value="Todos">Todos</Option>
-                    <Option value="Nacional">Nacional 🇲🇽</Option>
-                    <Option value="Exportacion">Exportación 🇺🇸</Option>
-                  </Select>
-                </div>
+                <div style={{ flex: 1, minWidth: '200px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span><Input prefix={<Search size={16} color="#666" />} placeholder="Buscar..." value={textoBusqueda} onChange={(e) => setTextoBusqueda(e.target.value)} style={{ background: '#262626', border: '1px solid #444', color: '#fff' }} allowClear /></div>
+                <div style={{ width: '250px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span><RangePicker style={{ width: '100%' }} value={rangoFechas} onChange={setRangoFechas} getPopupContainer={t => t.parentNode} /></div>
+                <div style={{ width: '150px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span><Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Salida">Salida</Option><Option value="Regreso">Regreso</Option></Select></div>
+                <div style={{ width: '180px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span><Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Nacional">Nacional 🇲🇽</Option><Option value="Exportacion">Exportación 🇺🇸</Option></Select></div>
               </div>
-
-              <Table 
-                dataSource={viajesFiltradosReportes} 
-                columns={columnasReportes} 
-                expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} 
-                size="small"
-                rowKey="id"
-                pagination={{ pageSize: 15 }}
-                locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
+              <Table dataSource={viajesFiltradosReportes} size="small" rowKey="id" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
+                columns={[
+                  { title: 'Unidad', render: (_, r) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{r.unidad}</span>{renderTagsViaje(r)}</div>) },
+                  { title: 'Salida', dataIndex: 'salida' }, { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Llegada', dataIndex: 'llegada' },
+                  { title: 'Acciones', render: (_, record) => (<Button danger size="small" onClick={() => { setViajeActivoRastreo(record); setSelloActual(record.sello || 'Pendiente'); setMostrarModalRastreo(true); }} style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}>Rastreo especial de viaje</Button>) }
+                ]}
               />
             </div>
           )}
@@ -1732,42 +380,19 @@ function App() {
               <Collapse ghost expandIconPosition="end">
                 <Panel header="Vehiculos" key="1" style={{ borderBottom: '1px solid #222' }}>
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
-                    <div style={{ width: '250px', textAlign: 'center' }}>
-                      <p>Nombre del vehiculo</p>
-                      <Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} />
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <Button type="primary" onClick={() => handleAgregar('vehiculos')}>{editandoId && tipoEdicion === 'vehiculos' ? 'Guardar Cambios' : 'Agregar'}</Button>
-                        <Button onClick={cancelarEdicion}>Cancelar</Button>
-                      </div>
-                    </div>
+                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del vehiculo</p><Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('vehiculos')}>{editandoId && tipoEdicion === 'vehiculos' ? 'Guardar Cambios' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
                     <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('vehiculos', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
                 <Panel header="Choferes" key="2" style={{ borderBottom: '1px solid #222' }}>
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
-                    <div style={{ width: '250px', textAlign: 'center' }}>
-                      <p>Nombre del chofer</p>
-                      <Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} />
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <Button type="primary" onClick={() => handleAgregar('choferes')}>{editandoId && tipoEdicion === 'choferes' ? 'Guardar Cambios' : 'Agregar'}</Button>
-                        <Button onClick={cancelarEdicion}>Cancelar</Button>
-                      </div>
-                    </div>
+                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del chofer</p><Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('choferes')}>{editandoId && tipoEdicion === 'choferes' ? 'Guardar Cambios' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
                     <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('choferes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
                 <Panel header="Clientes" key="3" style={{ borderBottom: '1px solid #222' }}>
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
-                    <div style={{ width: '250px', textAlign: 'center' }}>
-                      <p>Nombre del Cliente</p>
-                      <Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} />
-                      <p>Correo</p>
-                      <Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} />
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <Button type="primary" onClick={() => handleAgregar('clientes')}>{editandoId && tipoEdicion === 'clientes' ? 'Guardar Cambios' : 'Agregar'}</Button>
-                        <Button onClick={cancelarEdicion}>Cancelar</Button>
-                      </div>
-                    </div>
+                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del Cliente</p><Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} /><p>Correo</p><Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('clientes')}>{editandoId && tipoEdicion === 'clientes' ? 'Guardar Cambios' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
                     <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('clientes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
@@ -1775,560 +400,19 @@ function App() {
             </div>
           )}
 
-          {/* MODAL NUEVO VIAJE */}
-          {mostrarModalNuevoViaje && (
-            <div id="area-modal-nuevo-viaje" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
-              <div style={{ width: '500px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', alignItems: 'center' }}>
-                  <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Nuevo viaje</span>
-                  <X onClick={() => setMostrarModalNuevoViaje(false)} style={{ cursor: 'pointer', color: '#888' }} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Fecha :</label>
-                    <DatePicker 
-                      status={!datosNuevoViaje.fecha && "error"}
-                      value={datosNuevoViaje.fecha} 
-                      onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, fecha: val})} 
-                      style={{ flex: 1 }} 
-                      getPopupContainer={(trigger) => trigger.parentNode}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>No. Carta Porte :</label>
-                    <Input 
-                      status={!datosNuevoViaje.cp && "error"}
-                      value={datosNuevoViaje.cp} 
-                      onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, cp: e.target.value})} 
-                      style={{ flex: 1, background: '#262626', border: '1px solid #444' }} 
-                    />
-                  </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Sello :</label>
-                    <Input 
-                      value={datosNuevoViaje.sello} 
-                      onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, sello: e.target.value})} 
-                      style={{ flex: 1, background: '#262626', border: '1px solid #444' }} 
-                      placeholder="Opcional"
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Hora de salida :</label>
-                    <TimePicker 
-                      status={!datosNuevoViaje.hora && "error"}
-                      value={datosNuevoViaje.hora} 
-                      onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, hora: val})} 
-                      format="HH:mm" 
-                      style={{ flex: 1 }} 
-                      getPopupContainer={(trigger) => trigger.parentNode}
-                    />
-                  </div>
-
-                  {/* NUEVOS CONTROLES DE MOVIMIENTO Y SERVICIO */}
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Movimiento :</label>
-                    <Radio.Group 
-                      value={datosNuevoViaje.movimiento} 
-                      onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, movimiento: e.target.value})}
-                      style={{ flex: 1 }}
-                    >
-                      <Radio.Button value="Salida">Salida</Radio.Button>
-                      <Radio.Button value="Regreso">Regreso</Radio.Button>
-                    </Radio.Group>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '6px' }}>
-                    <label style={{ width: '120px' }}>Servicio :</label>
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <Switch 
-                        checked={datosNuevoViaje.esExportacion} 
-                        onChange={(checked) => setDatosNuevoViaje({...datosNuevoViaje, esExportacion: checked})} 
-                        checkedChildren="Exportación 🇺🇸" 
-                        unCheckedChildren="Nacional 🇲🇽"
-                      />
-                      <span style={{ fontSize: '13px', color: datosNuevoViaje.esExportacion ? '#fbbf24' : '#4ade80', fontWeight: 'bold' }}>
-                        {datosNuevoViaje.esExportacion ? 'Exportación EE.UU.' : 'Nacional'}
-                      </span>
-                    </div>
-                  </div>
-                  {/* FIN NUEVOS CONTROLES */}
-
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Unidad :</label>
-                    <Select 
-                      status={!datosNuevoViaje.unidad && "error"}
-                      showSearch 
-                      style={{ flex: 1 }} 
-                      placeholder="Selecciona unidad" 
-                      value={datosNuevoViaje.unidad} 
-                      onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, unidad: val})} 
-                      getPopupContainer={(trigger) => trigger.parentNode}
-                    >
-                      {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
-                    </Select>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Chofer :</label>
-                    <Select 
-                      status={!datosNuevoViaje.chofer && "error"}
-                      showSearch 
-                      style={{ flex: 1 }} 
-                      placeholder="Selecciona chofer" 
-                      value={datosNuevoViaje.chofer} 
-                      onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, chofer: val})} 
-                      getPopupContainer={(trigger) => trigger.parentNode}
-                    >
-                      {choferes.map(ch => <Option key={ch.id} value={ch.nombre}>{ch.nombre}</Option>)}
-                    </Select>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Caja :</label>
-                    <SelectInteligente categoria="caja" value={datosNuevoViaje.caja} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, caja: val})} placeholder="Escribe o selecciona caja" />
-                  </div>
-                  
-                  {/* AUTO-COMPLETAR CORREO AL SELECCIONAR CLIENTE */}
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Cliente :</label>
-                    <Select showSearch style={{ flex: 1 }} placeholder="Selecciona cliente" value={datosNuevoViaje.cliente} 
-                      onChange={(val) => {
-                        const clienteEncontrado = clientes.find(c => c.nombre === val);
-                        setDatosNuevoViaje({
-                          ...datosNuevoViaje, 
-                          cliente: val, 
-                          correoEnvio: clienteEncontrado?.correo || '' 
-                        });
-                      }} 
-                      getPopupContainer={(trigger) => trigger.parentNode} >
-                      {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
-                    </Select>
-                  </div>
-                  
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Origen :</label>
-                    <SelectInteligente categoria="origen" value={datosNuevoViaje.origen} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, origen: val})} placeholder="Escribe o selecciona origen" />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Destino :</label>
-                    <SelectInteligente categoria="destino" value={datosNuevoViaje.destino} onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, destino: val})} placeholder="Escribe o selecciona destino" />
-                  </div>
-
-                  <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px', border: '1px solid #3b82f6' }}>
-                    <div style={{ marginBottom: '10px' }}>
-                      <Checkbox 
-                        checked={datosNuevoViaje.enviarACliente} 
-                        onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, enviarACliente: e.target.checked})}
-                        style={{ color: '#fff', fontWeight: 'bold' }}
-                      >
-                        Notificar creación de viaje al cliente
-                      </Checkbox>
-                    </div>
-                    {datosNuevoViaje.enviarACliente && (
-                      <>
-                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#3b82f6', fontWeight: 'bold' }}>Correo del cliente:</label>
-                        <Input 
-                          placeholder="Correo del destinatario (opcional)" 
-                          value={datosNuevoViaje.correoEnvio} 
-                          onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, correoEnvio: e.target.value})}
-                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #3b82f6' }} 
-                        />
-                      </>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
-                    <Button onClick={() => setMostrarModalNuevoViaje(false)} disabled={cargandoViaje} style={{ background: '#262626', color: '#fff' }}>Cancelar</Button>
-                    <Button type="primary" onClick={handleCrearViaje} loading={cargandoViaje}>Crear viaje</Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* MODAL CAPTURAR BITACORA MASIVA */}
-          {mostrarModalBitacora && (
-            <div id="area-modal-bitacora" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 2000, padding: '40px', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flex: 1 }}>
-                  <h2 style={{ margin: 0 }}>Capturar Bitacora</h2>
-                  <Select 
-                    mode="multiple" 
-                    placeholder="Busca y selecciona las unidades..." 
-                    style={{ width: '500px' }} 
-                    value={unidadesSeleccionadasBitacora}
-                    onChange={(values) => setUnidadesSeleccionadasBitacora(values)} 
-                    allowClear 
-                    showSearch
-                    getPopupContainer={(trigger) => trigger.parentNode}
-                  >
-                    {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
-                  </Select>
-                </div>
-                <X onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' }); }} style={{ cursor: 'pointer' }} />
-              </div>
-
-              {bannerBitacora.visible && (
-                <Alert
-                  message={bannerBitacora.mensaje}
-                  type={bannerBitacora.tipo}
-                  showIcon
-                  closable
-                  onClose={() => setBannerBitacora({ ...bannerBitacora, visible: false })}
-                  style={{ marginBottom: '20px', borderRadius: '4px' }}
-                />
-              )}
-
-              {unidadesSeleccionadasBitacora.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 450px))', gap: '25px', marginBottom: '80px' }}>
-                  {unidadesSeleccionadasBitacora.map(nombreUnidad => (
-                    <div key={nombreUnidad} style={{ background: '#1a1a1a', borderRadius: '4px', border: '1px solid #333' }}>
-                      
-                      <div style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid #333', fontWeight: 'bold', color: '#3b82f6', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <span style={{ fontSize: '16px' }}>{nombreUnidad}</span>
-                        {(() => {
-                           const vActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
-                           // PASAMOS TRUE PARA QUE SEA EDITABLE
-                           return renderTagsViaje(vActivo, true);
-                        })()}
-                      </div>
-
-                      <div style={{ padding: '25px', background: '#164e63', margin: '15px', borderRadius: '4px' }}>
-                        
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
-                          <label style={{ width: '100px' }}>Fecha/Hora :</label>
-                          <div style={{ display: 'flex', gap: '10px', flex: 1 }}>
-                            <DatePicker 
-                              style={{ flex: 1 }} 
-                              value={datosBitacora[nombreUnidad]?.fechaReporte} 
-                              onChange={val => handleInputBitacora(nombreUnidad, 'fechaReporte', val)} 
-                              getPopupContainer={(trigger) => trigger.parentNode}
-                              placeholder="Hoy"
-                            />
-                            <TimePicker 
-                              style={{ flex: 1 }} 
-                              format="HH:mm" 
-                              value={datosBitacora[nombreUnidad]?.horaReporte} 
-                              onChange={val => handleInputBitacora(nombreUnidad, 'horaReporte', val)} 
-                              getPopupContainer={(trigger) => trigger.parentNode}
-                              placeholder="Hora GPS"
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Estatus :</label>
-                          <SelectInteligente categoria="estatus" value={datosBitacora[nombreUnidad]?.estatus} onChange={val => handleInputBitacora(nombreUnidad, 'estatus', val)} placeholder="Estatus" />
-                        </div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Ubicacion :</label>
-                          <SelectInteligente categoria="ubicacion" value={datosBitacora[nombreUnidad]?.ubicacion} onChange={val => handleInputBitacora(nombreUnidad, 'ubicacion', val)} placeholder="Ubicación" />
-                        </div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Velocidad :</label>
-                          <SelectInteligente categoria="velocidad" value={datosBitacora[nombreUnidad]?.velocidad} onChange={val => handleInputBitacora(nombreUnidad, 'velocidad', val)} placeholder="Velocidad" />
-                        </div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Cliente :</label>
-                          <Select placeholder="Seleccionar" style={{ flex: 1 }} value={datosBitacora[nombreUnidad]?.cliente} 
-                            onChange={val => {
-                                handleInputBitacora(nombreUnidad, 'cliente', val);
-                                const clienteInfo = clientes.find(c => c.nombre === val);
-                                handleInputBitacora(nombreUnidad, 'correoEnvio', clienteInfo?.correo || '');
-                            }} 
-                            getPopupContainer={(trigger) => trigger.parentNode}>
-                              {clientes.map(cl => <Option key={cl.id} value={cl.nombre}>{cl.nombre}</Option>)}
-                          </Select>
-                        </div>
-                        <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Lugar :</label>
-                          <SelectInteligente categoria="lugar" value={datosBitacora[nombreUnidad]?.lugar} onChange={val => handleInputBitacora(nombreUnidad, 'lugar', val)} placeholder="Lugar" />
-                        </div>
-                        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}><label style={{ width: '100px' }}>Link :</label><Input value={datosBitacora[nombreUnidad]?.link || ''} onChange={e => handleInputBitacora(nombreUnidad, 'link', e.target.value)} style={{ flex: 1, background: 'rgba(0,0,0,0.2)' }} /></div>
-                        
-                        <div style={{ marginBottom: '15px', padding: '10px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                            <Checkbox 
-                              checked={datosBitacora[nombreUnidad]?.enviarACliente} 
-                              onChange={(e) => handleInputBitacora(nombreUnidad, 'enviarACliente', e.target.checked)}
-                              style={{ color: '#fff', marginBottom: '10px', fontWeight: 'bold' }}
-                            >
-                              Notificar al cliente
-                            </Checkbox>
-
-                            {datosBitacora[nombreUnidad]?.enviarACliente && (
-                              <>
-                                <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#ddd' }}>Correo del destinatario:</label>
-                                <Input placeholder="Correo del destinatario" value={datosBitacora[nombreUnidad]?.correoEnvio || ''} onChange={e => handleInputBitacora(nombreUnidad, 'correoEnvio', e.target.value)} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid #3b82f6' }} />
-                              </>
-                            )}
-                        </div>
-                        <Button type="primary" block style={{ height: '40px', fontWeight: 'bold' }} onClick={() => handleEnviarBitacora(nombreUnidad)}>
-                          {datosBitacora[nombreUnidad]?.enviarACliente ? 'Guardar y Notificar a Cliente' : 'Solo Guardar Estatus'}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div style={{ position: 'sticky', bottom: '-40px', left: '-40px', right: '-40px', background: '#000', padding: '20px 40px', borderTop: '1px solid #333', display: 'flex', justifyContent: 'flex-end', gap: '15px', zIndex: 10 }}>
-                <Button onClick={() => { setMostrarModalBitacora(false); setUnidadesSeleccionadasBitacora([]); setDatosBitacora({}); setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' }); }} style={{ background: '#262626', color: '#fff', border: 'none' }}>Cancelar</Button>
-                <Button type="primary" onClick={handleEnviarBitacoraMasiva} style={{ height: '32px', padding: '0 25px' }}>Enviar Consolidado a Tráfico</Button>
-              </div>
-            </div>
-          )}
-
-          {/* MODAL DESHABILITAR UNIDAD */}
-          <Modal
-            title={`Deshabilitar Unidad: ${unidadAfectada?.nombre}`}
-            open={mostrarModalMotivo}
-            onOk={confirmarDeshabilitar}
-            onCancel={() => setMostrarModalMotivo(false)}
-            okText="Confirmar"
-            cancelText="Cancelar"
-            okButtonProps={{ danger: true }}
-            getPopupContainer={() => document.body}
-          >
-            <div style={{ padding: '20px 0' }}>
-              <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Selecciona el motivo del resguardo:</p>
-              <Radio.Group onChange={(e) => setMotivoSeleccionado(e.target.value)} value={motivoSeleccionado}>
-                <Radio value="Taller" style={{ display: 'block', marginBottom: '8px' }}>Taller</Radio>
-                <Radio value="Incidente" style={{ display: 'block', marginBottom: '8px' }}>Incidente</Radio>
-                <Radio value="Corralon" style={{ display: 'block', marginBottom: '8px' }}>Corralon</Radio>
-                <Radio value="Baja Temporal" style={{ display: 'block', marginBottom: '8px' }}>Baja Temporal</Radio>
-              </Radio.Group>
-            </div>
-          </Modal>
-
-          {/* MODAL RASTREO ESPECIAL (ESPEJO) */}
-          {mostrarModalRastreo && viajeActivoRastreo && (
-            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 3000, padding: '20px' }}>
-              <div style={{ width: '1100px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '25px', maxHeight: '95vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '10px' }}>
-                  <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#3b82f6' }}>Rastreo Especial de Viaje</span>
-                  <X onClick={cerrarRastreoEspecial} style={{ cursor: 'pointer', color: '#888' }} size={24} />
-                </div>
-
-                {/* DETALLES DEL VIAJE */}
-                <div style={{ background: '#262626', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
-                  <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#aaa' }}>DETALLES DEL VIAJE</h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '13px' }}>
-                    <div><span style={{ color: '#888' }}>Tractor:</span> <br/><b>{viajeActivoRastreo.unidad}</b></div>
-                    <div><span style={{ color: '#888' }}>Remolque:</span> <br/><b>{viajeActivoRastreo.caja || 'N/A'}</b></div>
-                    <div><span style={{ color: '#888' }}>Chofer:</span> <br/><b>{viajeActivoRastreo.chofer}</b></div>
-                    <div><span style={{ color: '#888' }}>Cliente:</span> <br/><b>{viajeActivoRastreo.cliente}</b></div>
-                    <div><span style={{ color: '#888' }}>Origen:</span> <br/><b>{viajeActivoRastreo.origen}</b></div>
-                    <div><span style={{ color: '#888' }}>Destino:</span> <br/><b>{viajeActivoRastreo.destino}</b></div>
-                    <div><span style={{ color: '#888' }}>Carta Porte:</span> <br/><b>{viajeActivoRastreo.cp}</b></div>
-                    <div>
-                      <span style={{ color: '#888' }}>Sello:</span> <br/>
-                      <div style={{ display: 'flex', gap: '5px', marginTop: '2px' }}>
-                        <Input size="small" value={selloActual} onChange={e => setSelloActual(e.target.value)} style={{ width: '100px', background: '#000', color: '#fff', border: '1px solid #444' }} />
-                        <Button size="small" type="primary" onClick={handleActualizarSello}>Guardar</Button>
-                      </div>
-                    </div>
-                    {/* NUEVO: EDICIÓN RÁPIDA DE MOVIMIENTO Y SERVICIO */}
-                    <div>
-                       <span style={{ color: '#888' }}>Movimiento:</span> <br/>
-                       <Radio.Group 
-                         size="small" 
-                         value={viajeActivoRastreo.movimiento || 'Salida'} 
-                         onChange={async (e) => {
-                           const val = e.target.value;
-                           await updateDoc(doc(db, "viajes", viajeActivoRastreo.id), { movimiento: val });
-                           setViajeActivoRastreo({...viajeActivoRastreo, movimiento: val});
-                           message.success("Movimiento actualizado");
-                         }}
-                         style={{ marginTop: '2px' }}
-                       >
-                         <Radio.Button value="Salida">Salida</Radio.Button>
-                         <Radio.Button value="Regreso">Regreso</Radio.Button>
-                       </Radio.Group>
-                    </div>
-                    <div>
-                       <span style={{ color: '#888' }}>Servicio:</span> <br/>
-                       <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                         <Switch 
-                           size="small"
-                           checked={viajeActivoRastreo.esExportacion || false} 
-                           onChange={async (checked) => {
-                             await updateDoc(doc(db, "viajes", viajeActivoRastreo.id), { esExportacion: checked });
-                             setViajeActivoRastreo({...viajeActivoRastreo, esExportacion: checked});
-                             message.success("Servicio actualizado");
-                           }}
-                         />
-                         <span style={{ fontSize: '11px', color: viajeActivoRastreo.esExportacion ? '#fbbf24' : '#4ade80', fontWeight: 'bold' }}>
-                           {viajeActivoRastreo.esExportacion ? 'Exportación 🇺🇸' : 'Nacional 🇲🇽'}
-                         </span>
-                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* AGREGAR PUNTO DE REVISIÓN - ESPEJO */}
-                <div style={{ 
-                  background: 'rgba(59, 130, 246, 0.1)', 
-                  padding: '20px', 
-                  borderRadius: '8px', 
-                  marginBottom: '20px', 
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '15px'
-                }}>
-                  <h3 style={{ margin: '0 0 5px 0', fontSize: '14px', color: '#3b82f6', fontWeight: 'bold' }}>
-                    AGREGAR PUNTO DE REVISIÓN
-                  </h3>
-
-                  {/* FILA 1: Tiempos y Ubicación */}
-                  <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Fecha</span>
-                      <DatePicker style={{ width: '100%' }} value={datosNuevoPunto.fecha} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, fecha: v})} getPopupContainer={t => t.parentNode} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Hora</span>
-                      <TimePicker style={{ width: '100%' }} format="HH:mm" value={datosNuevoPunto.hora} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, hora: v})} getPopupContainer={t => t.parentNode} />
-                    </div>
-                    <div style={{ flex: 2, minWidth: '0' }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Ubicación</span>
-                      <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Ciudad, Estado o Punto de control" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: '0' }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Velocidad</span>
-                      <SelectInteligente categoria="velocidad" value={datosNuevoPunto.velocidad} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, velocidad: v})} placeholder="Ej. 80 KM" />
-                    </div>
-                  </div>
-
-                  {/* FILA 2: Estatus, Lugar, Link y Acción */}
-                  <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1, minWidth: '0' }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Estatus</span>
-                      <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Estatus" />
-                    </div>
-                    <div style={{ flex: 1, minWidth: '0' }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Lugar</span>
-                      <SelectInteligente categoria="lugar" value={datosNuevoPunto.lugar} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, lugar: v})} placeholder="Lugar" />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Link GPS</span>
-                      <Input value={datosNuevoPunto.link} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, link: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} placeholder="URL..." />
-                    </div>
-                    <div style={{ flex: 2 }}>
-                      <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Observaciones</span>
-                      <Input value={datosNuevoPunto.observaciones} onChange={e => setDatosNuevoPunto({...datosNuevoPunto, observaciones: e.target.value})} style={{ background: '#000', border: '1px solid #444', color: '#fff' }} placeholder="Notas adicionales..." />
-                    </div>
-                    <div style={{ flex: 0.5 }}>
-                      <Button type="primary" onClick={handleAgregarPunto} style={{ fontWeight: 'bold', width: '100%' }}>
-                        Agregar
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* TABLA DE HISTORIAL DE PUNTOS - ESPEJO */}
-                <div style={{ flex: 1, overflowY: 'auto' }}>
-                  <Table 
-                    dataSource={puntosRevision}
-                    rowKey="id"
-                    size="small"
-                    pagination={false}
-                    locale={{ emptyText: <Empty description="Aún no hay puntos de revisión para este viaje." /> }}
-                    columns={[
-                      { title: 'Fecha', dataIndex: 'fecha', key: 'fecha', width: 90 },
-                      { title: 'Hora', dataIndex: 'hora', key: 'hora', width: 70 },
-                      { title: 'Ubicación', dataIndex: 'ubicacion', key: 'ubicacion' },
-                      { title: 'Estatus', dataIndex: 'estatus', key: 'estatus' },
-                      { title: 'Velocidad', dataIndex: 'velocidad', key: 'velocidad' }, 
-                      { title: 'Lugar', dataIndex: 'lugar', key: 'lugar' },         
-                      { title: 'Observaciones', dataIndex: 'observaciones', key: 'observaciones' },
-                      { title: 'GPS', render: (_, r) => r.link ? <a href={r.link} target="_blank" rel="noreferrer" style={{color: '#3b82f6'}}>Mapa</a> : '-' } 
-                    ]}
-                  />
-                </div>
-
-                {/* BOTONES FINALES */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', gap: '15px', borderTop: '1px solid #333', paddingTop: '15px' }}>
-                  <Button icon={<Download size={16} />} style={{ backgroundColor: '#107c41', color: 'white', border: 'none' }} onClick={handleDescargarExcel}>
-                    Descargar Excel (.xlsx)
-                  </Button>
-                  <Button onClick={cerrarRastreoEspecial} style={{ background: '#262626', color: '#fff', border: 'none' }}>
-                    Cerrar
-                  </Button>
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* NUEVO MODAL: CONFIRMAR FINALIZACIÓN DEL VIAJE */}
-          <Modal
-            title="Finalizar Viaje"
-            open={modalTerminarVisible}
-            onCancel={() => setModalTerminarVisible(false)}
-            onOk={confirmarTerminarViaje}
-            okText="Finalizar Viaje"
-            cancelText="Cancelar"
-            okButtonProps={{ danger: true }}
-            getPopupContainer={() => document.body}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', padding: '10px 0' }}>
-              <p style={{ margin: 0 }}>Selecciona cuándo concluyó este viaje:</p>
-              <Radio.Group value={modoTerminar} onChange={e => setModoTerminar(e.target.value)}>
-                <Space direction="vertical">
-                  <Radio value="ahora">Terminó en este preciso momento</Radio>
-                  <Radio value="personalizado">Ingresar una fecha y hora exacta pasada</Radio>
-                </Space>
-              </Radio.Group>
-              
-              {modoTerminar === 'personalizado' && (
-                <div style={{ display: 'flex', gap: '10px', marginTop: '5px', background: 'rgba(0,0,0,0.05)', padding: '15px', borderRadius: '8px' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#888' }}>Fecha de llegada</label>
-                    <DatePicker 
-                      value={nuevaFechaFin} 
-                      onChange={setNuevaFechaFin} 
-                      style={{ width: '100%' }}
-                      getPopupContainer={t => t.parentNode}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '12px', color: '#888' }}>Hora de llegada</label>
-                    <TimePicker 
-                      format="HH:mm" 
-                      value={nuevaHoraFin} 
-                      onChange={setNuevaHoraFin} 
-                      style={{ width: '100%' }}
-                      getPopupContainer={t => t.parentNode}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </Modal>
-
-          {/* NUEVO MODAL: EDITAR INICIO DE VIAJE */}
-          <Modal
-            title={`Editar Inicio: ${viajeAEditarInicio?.unidad}`}
-            open={modalEditarInicioVisible}
-            onCancel={() => setModalEditarInicioVisible(false)}
-            onOk={guardarEdicionInicio}
-            okText="Guardar Cambios"
-            cancelText="Cancelar"
-            getPopupContainer={() => document.body}
-          >
-            <div style={{ display: 'flex', gap: '15px', padding: '20px 0' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Nueva Fecha de Salida:</label>
-                <DatePicker 
-                  value={nuevaFechaInicio} 
-                  onChange={setNuevaFechaInicio} 
-                  style={{ width: '100%' }} 
-                  getPopupContainer={t => t.parentNode}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Nueva Hora de Salida:</label>
-                <TimePicker 
-                  format="HH:mm" 
-                  value={nuevaHoraInicio} 
-                  onChange={setNuevaHoraInicio} 
-                  style={{ width: '100%' }} 
-                  getPopupContainer={t => t.parentNode}
-                />
-              </div>
-            </div>
-          </Modal>
-
         </div>
+
+        {/* MODALES EXTERNOS */}
+        <ModalNuevoViaje visible={mostrarModalNuevoViaje} onCancel={() => setMostrarModalNuevoViaje(false)} unidades={unidades} choferes={choferes} clientes={clientes} viajes={viajes} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} />
+        <ModalBitacora visible={mostrarModalBitacora} onCancel={() => setMostrarModalBitacora(false)} unidades={unidades} viajes={viajes} clientes={clientes} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} renderTagsViaje={renderTagsViaje} />
+        <ModalTerminarViaje visible={modalTerminarVisible} onCancel={() => setModalTerminarVisible(false)} onConfirm={confirmarTerminarViaje} />
+        <ModalMotivoDeshabilitar visible={mostrarModalMotivo} onCancel={() => setMostrarModalMotivo(false)} onOk={confirmarDeshabilitar} unidadNombre={unidadAfectada?.nombre} motivo={motivoSeleccionado} setMotivo={setMotivoSeleccionado} />
+        <ModalRastreoEspecial visible={mostrarModalRastreo} onCancel={() => setMostrarModalRastreo(false)} viaje={viajeActivoRastreo} puntos={puntosRevision} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} selloActual={selloActual} setSelloActual={setSelloActual} />
+
       </div>
     </ConfigProvider>
   );
 }
+  
 
 export default App;
