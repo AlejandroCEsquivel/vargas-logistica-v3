@@ -237,7 +237,7 @@ function App() {
     return (
       <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
         <span onClick={() => isEditable && toggleMovimiento(viaje)} title={isEditable ? "Clic para cambiar" : ""} style={{ cursor: isEditable ? 'pointer' : 'default', fontSize: '10px', background: viaje.movimiento === 'Regreso' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(59, 130, 246, 0.2)', color: viaje.movimiento === 'Regreso' ? '#c084fc' : '#60a5fa', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>
-          {viaje.movimiento === 'Regreso' ? <><ArrowDown size={10} /> REGRESO</> : <><ArrowUp size={10} /> SALIDA</>}
+          {viaje.movimiento === 'Regreso' ? <><ArrowUp size={10} /> REGRESO</> : <><ArrowDown size={10} /> SALIDA</>}
         </span>
         <span onClick={() => isEditable && toggleServicio(viaje)} title={isEditable ? "Clic para cambiar" : ""} style={{ cursor: isEditable ? 'pointer' : 'default', fontSize: '10px', background: viaje.esExportacion ? 'rgba(245, 158, 11, 0.2)' : 'rgba(34, 197, 94, 0.2)', color: viaje.esExportacion ? '#fbbf24' : '#4ade80', padding: '2px 6px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '2px' }}>
           {viaje.esExportacion ? "🇺🇸 EXPORTACIÓN" : "🇲🇽 NACIONAL"}
