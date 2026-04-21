@@ -3,6 +3,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import dayjs from 'dayjs';
 
+// --- FUNCIÓN 1: REPORTE DETALLADO (EL QUE YA TENÍAS) ---
 export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, message) => {
   if (!viajeActivoRastreo) return;
 
@@ -20,18 +21,16 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
       { width: 20 }  // F: Link GPS / Sello
     ];
 
-    // Tiempos extraídos
     const fechaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleDateString('es-MX') : '';
     const horaI = viajeActivoRastreo.fechaInicioExacta ? new Date(viajeActivoRastreo.fechaInicioExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : '';
     const fechaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleDateString('es-MX') : '';
     const horaF = viajeActivoRastreo.fechaFinExacta ? new Date(viajeActivoRastreo.fechaFinExacta).toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit'}) : 'En tránsito';
 
-    // Estilos reutilizables
     const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } };
     const subHeaderFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
     const borderStyle = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
 
-    // 2. Encabezado principal
+    // Encabezado
     worksheet.mergeCells('A1:F2');
     const titleCell = worksheet.getCell('A1');
     titleCell.value = 'RASTREO ESPECIAL DE VIAJE FORÁNEO';
@@ -39,9 +38,9 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     titleCell.fill = headerFill;
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    worksheet.addRow([]); // Espacio
+    worksheet.addRow([]); 
 
-    // 3. Información general del viaje
+    // Info General
     const row4 = worksheet.addRow(['Camión:', viajeActivoRastreo.unidad, '', 'Chofer:', viajeActivoRastreo.chofer, '']);
     const row5 = worksheet.addRow(['Caja:', viajeActivoRastreo.caja, '', 'Origen:', viajeActivoRastreo.origen, '']);
     const row6 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
@@ -58,7 +57,6 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
       row.getCell(5).alignment = { horizontal: 'left', wrapText: true };
     });
 
-    // 4. Bloque Salida
     worksheet.addRow([]); 
     const depHeader = worksheet.addRow(['INFORMACIÓN DE SALIDA DE ORIGEN', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
     depHeader.eachCell(cell => {
@@ -75,7 +73,6 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     });
     worksheet.mergeCells(`D${depData.number}:E${depData.number}`);
 
-    // 5. Los 17 Puntos
     worksheet.addRow([]);
     const inspRow = worksheet.addRow(['Confirmar con el chofer inspección de 17 puntos', '', '', '', 'Sí [  ]', 'No [  ]']);
     inspRow.font = { bold: true };
@@ -83,7 +80,6 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     worksheet.mergeCells(`A${inspRow.number}:D${inspRow.number}`);
     inspRow.eachCell(cell => cell.border = borderStyle);
 
-    // 6. Encabezado de la bitácora
     worksheet.addRow([]);
     const trackTitle = worksheet.addRow(['RASTREO: LOCALIZACIÓN CADA HORA']);
     trackTitle.font = { bold: true, size: 12, color: { argb: 'FFFFFFFF' } };
@@ -99,7 +95,7 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
        cell.alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
-    // 7. LLENADO DINÁMICO
+    // Llenado dinámico
     const puntosAProcesar = puntosRevision.map(p => ({
       ...p,
       timeObj: dayjs(`${p.fecha} ${p.hora}`),
@@ -107,15 +103,8 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     }));
 
     const horasCubiertas = new Set(puntosAProcesar.map(p => p.timeObj.format('YYYY-MM-DD HH')));
-
-    let pivoteInicio = viajeActivoRastreo.fechaInicioExacta ? dayjs(viajeActivoRastreo.fechaInicioExacta) : null;
+    let pivoteInicio = viajeActivoRastreo.fechaInicioExacta ? dayjs(viajeActivoRastreo.fechaInicioExacta) : (puntosAProcesar.length > 0 ? puntosAProcesar[0].timeObj : dayjs());
     let pivoteFin = viajeActivoRastreo.fechaFinExacta ? dayjs(viajeActivoRastreo.fechaFinExacta) : dayjs();
-
-    if (!pivoteInicio && puntosAProcesar.length > 0) {
-      pivoteInicio = puntosAProcesar[0].timeObj;
-    } else if (!pivoteInicio) {
-      pivoteInicio = dayjs();
-    }
 
     puntosAProcesar.push({
       fecha: pivoteInicio.format('YYYY-MM-DD'),
@@ -127,9 +116,7 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     });
 
     let iteradorHora = pivoteInicio.clone().startOf('hour');
-    const finHoraRango = pivoteFin.clone().startOf('hour');
-
-    while (iteradorHora.isBefore(finHoraRango) || iteradorHora.isSame(finHoraRango, 'hour')) {
+    while (iteradorHora.isBefore(pivoteFin.clone().startOf('hour')) || iteradorHora.isSame(pivoteFin.clone().startOf('hour'), 'hour')) {
       const keyHora = iteradorHora.format('YYYY-MM-DD HH');
       if (!horasCubiertas.has(keyHora) && iteradorHora.isBefore(pivoteFin)) {
         puntosAProcesar.push({
@@ -159,33 +146,14 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     puntosAProcesar.sort((a, b) => a.timeObj.valueOf() - b.timeObj.valueOf());
 
     puntosAProcesar.forEach(p => {
-      const fechaHora = `${p.fecha || ''} ${p.hora || ''}`;
-      
-      let ubiLugar = '';
-      if (p.esMarcador) {
-          ubiLugar = p.ubicacion;
-      } else if (p.esReal) {
-          ubiLugar = `${p.ubicacion || ''} ${p.lugar && p.lugar !== '-' ? '- ' + p.lugar : ''}`;
-      } else {
-          ubiLugar = p.ubicacion;
-      }
-      
-      const dataRow = worksheet.addRow([fechaHora, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
+      const ubiLugar = p.esMarcador ? p.ubicacion : (p.esReal ? `${p.ubicacion || ''} ${p.lugar && p.lugar !== '-' ? '- ' + p.lugar : ''}` : p.ubicacion);
+      const dataRow = worksheet.addRow([`${p.fecha || ''} ${p.hora || ''}`, ubiLugar, p.estatus, p.velocidad, p.observaciones, '']);
       
       dataRow.eachCell((cell, colNumber) => {
         cell.border = borderStyle;
-        cell.alignment = { 
-            vertical: 'middle', 
-            horizontal: colNumber === 1 || colNumber === 3 || colNumber === 4 ? 'center' : 'left',
-            wrapText: true 
-        };
-
-        if (p.esMarcador) {
-            cell.font = { bold: true };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
-        } else if (!p.esReal && !p.esMarcador) {
-            cell.font = { color: { argb: 'FF888888' }, italic: true };
-        }
+        cell.alignment = { vertical: 'middle', horizontal: [1,3,4].includes(colNumber) ? 'center' : 'left', wrapText: true };
+        if (p.esMarcador) { cell.font = { bold: true }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } }; }
+        else if (!p.esReal) { cell.font = { color: { argb: 'FF888888' }, italic: true }; }
       });
 
       const linkCell = dataRow.getCell(6);
@@ -199,29 +167,93 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
       }
     });
 
-    // 8. Bloque Llegada Destino
+    // Bloque Final
     worksheet.addRow([]);
     const arrHeader = worksheet.addRow(['INFORMACIÓN DE LLEGADA A DESTINO', 'Fecha', 'Hora', 'Lugar', '', 'No. de Sello']);
-    arrHeader.eachCell(cell => {
-       cell.font = { bold: true };
-       cell.fill = subHeaderFill;
-       cell.border = borderStyle;
-       cell.alignment = { horizontal: 'center' };
-    });
+    arrHeader.eachCell(cell => { cell.font = { bold: true }; cell.fill = subHeaderFill; cell.border = borderStyle; cell.alignment = { horizontal: 'center' }; });
 
     const arrData = worksheet.addRow(['', fechaF, horaF, viajeActivoRastreo.destino, '', viajeActivoRastreo.sello || '']);
-    arrData.eachCell(cell => {
-        cell.border = borderStyle;
-        cell.alignment = { horizontal: 'center', wrapText: true };
-    });
+    arrData.eachCell(cell => { cell.border = borderStyle; cell.alignment = { horizontal: 'center', wrapText: true }; });
+    worksheet.mergeCells(`D${arrData.number}:E${arrData.number}`);
 
-    // 9. Generar y descargar
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.xlsx`);
+    saveAs(new Blob([buffer]), `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.xlsx`);
     
   } catch (error) {
-    console.error("Error generando Excel:", error);
-    if(message) message.error("Hubo un error al generar el archivo Excel");
+    console.error("Error detallado:", error);
+    if(message) message.error("Error al generar el archivo Excel");
+  }
+};
+
+
+// --- FUNCIÓN 2: NUEVO REPORTE GENERAL (LA SÁBANA) ---
+export const generarExcelGeneral = async (viajesFiltrados) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Reporte General');
+
+    // 1. Columnas
+    worksheet.columns = [
+      { header: 'UNIDAD', key: 'unidad', width: 12 },
+      { header: 'CHOFER', key: 'chofer', width: 35 },
+      { header: 'CARTA PORTE', key: 'cp', width: 18 },
+      { header: 'ORIGEN', key: 'origen', width: 25 },
+      { header: 'DESTINO', key: 'destino', width: 35 },
+      { header: 'CLIENTE', key: 'cliente', width: 30 },
+      { header: 'MOVIMIENTO', key: 'movimiento', width: 15 },
+      { header: 'SERVICIO', key: 'servicio', width: 20 },
+      { header: 'SALIDA (Despegue)', key: 'salida', width: 22 },
+      { header: 'LLEGADA (Arribo)', key: 'llegada', width: 22 }
+    ];
+
+    // 2. Estilos Encabezado
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+    });
+    headerRow.height = 25;
+
+    // 3. Llenado
+    viajesFiltrados.forEach(viaje => {
+      const fechaInicio = viaje.fechaInicioExacta 
+        ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+        : `${viaje.fecha || ''} ${viaje.hora || ''}`;
+
+      let fechaLlegada = 'EN TRÁNSITO 🚚';
+      if (viaje.estatus === 'finalizado' || viaje.fechaFinExacta) {
+        fechaLlegada = viaje.fechaFinExacta 
+          ? new Date(viaje.fechaFinExacta).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
+          : 'Finalizado';
+      }
+
+      const row = worksheet.addRow({
+        unidad: viaje.unidad || '-',
+        chofer: viaje.chofer || '-',
+        cp: viaje.cp || 'Pendiente',
+        origen: viaje.origen || '-',
+        destino: viaje.destino || '-',
+        cliente: viaje.cliente || '-',
+        movimiento: viaje.movimiento ? viaje.movimiento.toUpperCase() : 'SALIDA',
+        servicio: viaje.esExportacion ? 'EXPORTACIÓN EE.UU.' : 'NACIONAL',
+        salida: fechaInicio,
+        llegada: fechaLlegada
+      });
+
+      // Alineación
+      ['unidad', 'cp', 'movimiento', 'salida', 'llegada'].forEach(k => {
+        row.getCell(k).alignment = { horizontal: 'center' };
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const fechaHoy = new Date().toISOString().split('T')[0];
+    saveAs(new Blob([buffer]), `Reporte_General_Vargas_${fechaHoy}.xlsx`);
+
+  } catch (error) {
+    console.error("Error Excel General:", error);
+    throw error;
   }
 };

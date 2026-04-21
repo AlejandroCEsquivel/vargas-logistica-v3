@@ -14,6 +14,7 @@ import ModalBitacora from './components/ModalBitacora';
 import ModalRastreoEspecial from './components/ModalRastreoEspecial';
 import ModalMotivoDeshabilitar from './components/ModalMotivoDeshabilitar';
 import ModalTerminarViaje from './components/ModalTerminarViaje';
+import { generarExcelGeneral } from './services/excelService';
 
 const { Option } = Select;
 const { Panel } = Collapse;
@@ -259,6 +260,21 @@ function App() {
     return coincideTexto && coincideFecha && coincideMovimiento && coincideServicio;
   });
 
+  // FUNCIÓN PARA EXPORTAR REPORTE GENERAL
+  const handleDescargarReporteMasivo = async () => {
+    if (viajesFiltradosReportes.length === 0) {
+      return message.warning("No hay viajes en la tabla para exportar.");
+    }
+    
+    message.loading({ content: 'Construyendo Excel...', key: 'excelGen' });
+    try {
+      await generarExcelGeneral(viajesFiltradosReportes);
+      message.success({ content: 'Reporte General exportado con éxito', key: 'excelGen' });
+    } catch (error) {
+      message.error({ content: 'Hubo un error al crear el archivo Excel', key: 'excelGen' });
+    }
+  };
+
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
@@ -363,6 +379,18 @@ function App() {
                 <div style={{ width: '250px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span><RangePicker style={{ width: '100%' }} value={rangoFechas} onChange={setRangoFechas} getPopupContainer={t => t.parentNode} /></div>
                 <div style={{ width: '150px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span><Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Salida">Salida</Option><Option value="Regreso">Regreso</Option></Select></div>
                 <div style={{ width: '180px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span><Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Nacional">Nacional 🇲🇽</Option><Option value="Exportacion">Exportación 🇺🇸</Option></Select></div>
+                
+                {/* BOTÓN DE EXPORTAR AL LADO DE LOS FILTROS */}
+                <div style={{ display: 'flex', alignItems: 'flex-end', marginLeft: 'auto' }}>
+                  <Button 
+                    type="primary" 
+                    icon={<FileText size={16} />} 
+                    onClick={handleDescargarReporteMasivo} 
+                    style={{ backgroundColor: '#107c41', borderColor: '#107c41', fontWeight: 'bold', height: '32px' }}
+                  >
+                    Exportar Reporte General
+                  </Button>
+                </div>
               </div>
               <Table dataSource={viajesFiltradosReportes} size="small" rowKey="id" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
                 columns={[
