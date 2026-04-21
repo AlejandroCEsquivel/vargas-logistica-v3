@@ -81,12 +81,12 @@ const ModalBitacora = ({
 
       const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
       const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
-      const fechaFormateada = fechaTexto.charAt(0).toUpperCase() + fechaTexto.slice(1);
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
       
       const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
       const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
 
+      // ESTE ES EL ÚNICO LUGAR DONDE SE DEBE GUARDAR EL PUNTO EN LA BASE DE DATOS
       if (viajeActivo) {
         await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
           fecha: fechaYYYYMMDD, hora: horaString, ubicacion: info.ubicacion || '',
@@ -137,32 +137,15 @@ const ModalBitacora = ({
       for (const nombreUnidad of unidadesSeleccionadasBitacora) {
         const info = datosBitacora[nombreUnidad] || {};
         
-        await guardarSugerenciaAutomatica('estatus', info.estatus);
-        await guardarSugerenciaAutomatica('ubicacion', info.ubicacion);
-        await guardarSugerenciaAutomatica('velocidad', info.velocidad);
-        await guardarSugerenciaAutomatica('lugar', info.lugar);
-
         const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
 
-        if (viajeActivo && viajeActivo.estatus === 'espera' && info.cliente && info.cliente !== viajeActivo.cliente) {
-            await updateDoc(doc(db, "viajes", viajeActivo.id), { cliente: info.cliente });
-        }
-
         const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
         const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
-        const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
-        const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
 
-        if (viajeActivo) {
-          await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
-            fecha: fechaYYYYMMDD, hora: horaString, ubicacion: info.ubicacion || '',
-            estatus: info.estatus || '', velocidad: info.velocidad || '', cliente: info.cliente || '',
-            lugar: info.lugar || '', link: info.link || '', observaciones: 'Reporte consolidado automático',
-            timestamp: timestampAjustado
-          });
-        }
+        // NOTA DE CORRECCIÓN: Se eliminó el bloque de código que hacía un `addDoc` a la colección `puntos_revision`.
+        // Ahora esta función solo lee los datos de pantalla y arma el correo electrónico, evitando la duplicación.
 
         filasViajesHTML += `
           <tr>
