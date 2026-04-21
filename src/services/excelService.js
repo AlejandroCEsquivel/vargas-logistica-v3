@@ -208,16 +208,18 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
 
     // 2. Estilos Encabezado
     const headerRow = worksheet.getRow(1);
+    const borderStyleLight = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+
     headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } }; // Azul oscuro institucional
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.border = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
+      cell.border = borderStyleLight;
     });
     headerRow.height = 25;
 
-    // 3. Llenado
-    viajesFiltrados.forEach(viaje => {
+    // 3. Llenado con Diseño "Cebra" y Bordes
+    viajesFiltrados.forEach((viaje, index) => {
       const fechaInicio = viaje.fechaInicioExacta 
         ? new Date(viaje.fechaInicioExacta).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })
         : `${viaje.fecha || ''} ${viaje.hora || ''}`;
@@ -242,8 +244,18 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
         llegada: fechaLlegada
       });
 
-      // 4. Formato de las filas de datos (Wrap Text y Alineación)
+      // Lógica de "Cebra": Si el índice es par, el fondo es blanco. Si es impar, es un gris clarito.
+      const isEven = index % 2 === 0;
+      const rowFill = isEven 
+        ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } } // Blanco
+        : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F9F9' } }; // Gris súper clarito
+
+      // 4. Formato de las filas de datos (Wrap Text, Alineación, Cebra y Bordes)
       row.eachCell((cell, colNumber) => {
+        // Aplicar el fondo cebra y el borde tenue a TODAS las celdas de esta fila
+        cell.fill = rowFill;
+        cell.border = borderStyleLight;
+
         // Centrar columnas clave: Unidad(1), CP(3), Movimiento(7), Servicio(8), Salida(9), Llegada(10)
         if ([1, 3, 7, 8, 9, 10].includes(colNumber)) {
           cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
