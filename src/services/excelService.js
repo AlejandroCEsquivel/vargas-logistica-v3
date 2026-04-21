@@ -192,13 +192,13 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Reporte General');
 
-    // 1. Columnas
+    // 1. Columnas ajustadas para mayor espacio
     worksheet.columns = [
       { header: 'UNIDAD', key: 'unidad', width: 12 },
       { header: 'CHOFER', key: 'chofer', width: 35 },
       { header: 'CARTA PORTE', key: 'cp', width: 18 },
-      { header: 'ORIGEN', key: 'origen', width: 25 },
-      { header: 'DESTINO', key: 'destino', width: 35 },
+      { header: 'ORIGEN', key: 'origen', width: 45 },   // <-- Más ancho
+      { header: 'DESTINO', key: 'destino', width: 50 }, // <-- Más ancho
       { header: 'CLIENTE', key: 'cliente', width: 30 },
       { header: 'MOVIMIENTO', key: 'movimiento', width: 15 },
       { header: 'SERVICIO', key: 'servicio', width: 20 },
@@ -242,9 +242,15 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
         llegada: fechaLlegada
       });
 
-      // Alineación
-      ['unidad', 'cp', 'movimiento', 'salida', 'llegada'].forEach(k => {
-        row.getCell(k).alignment = { horizontal: 'center' };
+      // 4. Formato de las filas de datos (Wrap Text y Alineación)
+      row.eachCell((cell, colNumber) => {
+        // Centrar columnas clave: Unidad(1), CP(3), Movimiento(7), Servicio(8), Salida(9), Llegada(10)
+        if ([1, 3, 7, 8, 9, 10].includes(colNumber)) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        } else {
+          // Alinear a la izquierda textos largos: Chofer(2), Origen(4), Destino(5), Cliente(6)
+          cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        }
       });
     });
 
