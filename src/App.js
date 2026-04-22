@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-// Se agregó 'Trash2' a la lista de imports de lucide-react
 import { Home, History, FileText, Settings, Truck, Clock, Warehouse, Search, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { DatePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd'; 
 import { db } from './firebase';
@@ -32,8 +31,9 @@ function App() {
   const [reportes, setReportes] = useState([]); 
   const [sugerencias, setSugerencias] = useState({ estatus: [], ubicacion: [], velocidad: [], lugar: [], caja: [], origen: [], destino: [] });
 
-  // ESTADOS DE MODALES
+  // ESTADOS DE MODALES Y HERENCIA
   const [mostrarModalNuevoViaje, setMostrarModalNuevoViaje] = useState(false);
+  const [datosHeredados, setDatosHeredados] = useState(null); // <-- Nuevo estado para guardar la herencia
   const [mostrarModalBitacora, setMostrarModalBitacora] = useState(false);
   const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
   const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
@@ -150,6 +150,12 @@ function App() {
       await deleteDoc(doc(db, "viajes", id));
       message.success("Unidad removida de espera correctamente");
     } catch (e) { message.error("No se pudo remover la unidad"); }
+  };
+
+  // <-- NUEVA FUNCIÓN PARA INICIAR NUEVO TRAMO -->
+  const handleIniciarNuevoTramo = (viajeEnEspera) => {
+    setDatosHeredados(viajeEnEspera);
+    setMostrarModalNuevoViaje(true);
   };
 
   const confirmarTerminarViaje = async (fechaIso) => {
@@ -330,13 +336,25 @@ function App() {
                   />
                 )}
                 {pestañaActiva === 'espera' && (
-                  <div style={{ textAlign: 'center', marginTop: '50px' }}>
-                    <h2 style={{ fontSize: '32px', marginBottom: '30px' }}>Espera de carga</h2>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', fontSize: '28px', fontWeight: 'bold' }}>
-                      {obtenerDatosTabla().length === 0 ? <Empty description="No hay unidades en espera" /> : obtenerDatosTabla().map(v => (
-                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}><span>{v.unidad}</span>{renderTagsViaje(v)}</div>
-                          <Popconfirm title="¿Borrar de espera?" onConfirm={() => handleEliminarEspera(v.id)} okText="Sí, borrar" cancelText="Cancelar" okButtonProps={{ danger: true }}><Trash2 size={22} color="#ff4d4f" style={{ cursor: 'pointer' }} /></Popconfirm>
+                  <div style={{ marginTop: '30px' }}>
+                    <h2 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '30px' }}>Espera de carga</h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
+                      {obtenerDatosTabla().length === 0 ? <div style={{ gridColumn: '1 / -1', textAlign: 'center' }}><Empty description="No hay unidades en espera" /></div> : obtenerDatosTabla().map(v => (
+                        <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #333' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
+                            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{v.unidad}</span>
+                            <span style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>Chofer: {v.chofer}</span>
+                            <span style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>Destino Ant: {v.destino || 'N/A'}</span>
+                            {renderTagsViaje(v)}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <Button type="primary" onClick={() => handleIniciarNuevoTramo(v)} style={{ backgroundColor: '#10b981', borderColor: '#10b981', fontWeight: 'bold' }}>
+                              Iniciar nuevo tramo
+                            </Button>
+                            <Popconfirm title="¿Borrar de espera?" onConfirm={() => handleEliminarEspera(v.id)} okText="Sí, borrar" cancelText="Cancelar" okButtonProps={{ danger: true }}>
+                              <Button danger icon={<Trash2 size={16} />} style={{ width: '100%' }}>Remover unidad</Button>
+                            </Popconfirm>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -431,7 +449,17 @@ function App() {
         </div>
 
         {/* MODALES EXTERNOS */}
-        <ModalNuevoViaje visible={mostrarModalNuevoViaje} onCancel={() => setMostrarModalNuevoViaje(false)} unidades={unidades} choferes={choferes} clientes={clientes} viajes={viajes} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} />
+        <ModalNuevoViaje 
+          visible={mostrarModalNuevoViaje} 
+          onCancel={() => {
+            setMostrarModalNuevoViaje(false);
+            setDatosHeredados(null); // <-- Limpiamos la herencia al cerrar
+          }} 
+          datosHeredados={datosHeredados} // <-- Pasamos los datos al modal
+          unidades={unidades} choferes={choferes} clientes={clientes} viajes={viajes} 
+          sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} 
+          eliminarSugerencia={eliminarSugerencia} 
+        />
         <ModalBitacora visible={mostrarModalBitacora} onCancel={() => setMostrarModalBitacora(false)} unidades={unidades} viajes={viajes} clientes={clientes} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} renderTagsViaje={renderTagsViaje} />
         <ModalTerminarViaje visible={modalTerminarVisible} onCancel={() => setModalTerminarVisible(false)} onConfirm={confirmarTerminarViaje} />
         <ModalMotivoDeshabilitar visible={mostrarModalMotivo} onCancel={() => setMostrarModalMotivo(false)} onOk={confirmarDeshabilitar} unidadNombre={unidadAfectada?.nombre} motivo={motivoSeleccionado} setMotivo={setMotivoSeleccionado} />
@@ -442,5 +470,4 @@ function App() {
   );
 }
   
-
 export default App;

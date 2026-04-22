@@ -1,9 +1,9 @@
 // src/components/ModalNuevoViaje.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DatePicker, TimePicker, Select, Button, Input, Radio, Checkbox, Switch, message } from 'antd';
 import { X } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore'; // Cambiamos deleteDoc por updateDoc
 import { enviarConBrevo } from '../services/brevoService';
 import { generarTablaNuevoViajeHTML } from '../services/emailTemplates';
 import SelectInteligente from './SelectInteligente';
@@ -19,7 +19,8 @@ const ModalNuevoViaje = ({
   viajes, 
   sugerencias, 
   guardarSugerenciaAutomatica, 
-  eliminarSugerencia 
+  eliminarSugerencia,
+  datosHeredados // <-- Nueva prop para recibir datos del tramo anterior
 }) => {
   const [cargandoViaje, setCargandoViaje] = useState(false);
   const [datosNuevoViaje, setDatosNuevoViaje] = useState({
@@ -28,6 +29,39 @@ const ModalNuevoViaje = ({
     origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: '',
     movimiento: 'Salida', esExportacion: false
   });
+
+  // EFECTO DE HERENCIA: Si el modal se abre con datos de un tramo anterior
+  useEffect(() => {
+    if (visible) {
+      if (datosHeredados) {
+        // Si viene de "Iniciar Nuevo Tramo", precargamos lo que ya sabemos
+        setDatosNuevoViaje({
+          fecha: null, 
+          cp: '', 
+          hora: null, 
+          unidad: datosHeredados.unidad,
+          chofer: datosHeredados.chofer, 
+          caja: datosHeredados.caja || '', 
+          cliente: undefined,
+          origen: datosHeredados.destino || '', // El nuevo origen es el destino donde llegó
+          destino: '', 
+          correoEnvio: '', 
+          enviarACliente: true, 
+          sello: '',
+          movimiento: 'Regreso', // Sugerimos regreso por defecto
+          esExportacion: false
+        });
+      } else {
+        // Si es un viaje desde cero, limpiamos todo
+        setDatosNuevoViaje({
+          fecha: null, cp: '', hora: null, unidad: undefined,
+          chofer: undefined, caja: '', cliente: undefined,
+          origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: '',
+          movimiento: 'Salida', esExportacion: false
+        });
+      }
+    }
+  }, [visible, datosHeredados]);
 
   const handleCrearViaje = async () => {
     if (!datosNuevoViaje.unidad || !datosNuevoViaje.chofer) {
@@ -41,22 +75,26 @@ const ModalNuevoViaje = ({
       }
     }
 
-    if (datosNuevoViaje.enviarACliente && datosNuevoViaje.correoEnvio && !/\S+@\S+\.\S+/.test(datosNuevoViaje.correoEnvio)) {
-      return message.error("El formato del correo electrónico no es válido");
-    }
-
     setCargandoViaje(true);
 
     try {
+      // 1. FINALIZAR EL TRAMO ANTERIOR (Si existe)
       const registroEnEspera = viajes.find(v => v.unidad === datosNuevoViaje.unidad && v.estatus === 'espera');
       if (registroEnEspera) {
-        await deleteDoc(doc(db, "viajes", registroEnEspera.id));
+        // En lugar de borrarlo, lo finalizamos para que aparezca en el historial y Excel
+        await updateDoc(doc(db, "viajes", registroEnEspera.id), { 
+          estatus: 'finalizado',
+          fechaFinalizacion: new Date().toISOString(),
+          fechaFinExacta: new Date().toISOString()
+        });
       }
 
+      // 2. GUARDAR SUGERENCIAS
       await guardarSugerenciaAutomatica('caja', datosNuevoViaje.caja);
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
       await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
 
+      // 3. CREAR EL NUEVO REGISTRO
       const nuevoRegistro = {
         ...datosNuevoViaje,
         cp: datosNuevoViaje.cp || 'Pendiente', 
@@ -73,17 +111,13 @@ const ModalNuevoViaje = ({
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
+      // 4. NOTIFICACIONES (BREVO)
       const correosInternos = [
-        "t.foraneo@transportesvargas.com",
-        "manuel.ochoa@transportesvargas.com",
-        "monitoreo@transportesvargas.com",
-        "seguridadtransportesvargas@gmail.com",
-        "control@transportesvargas.com",
-        "logistica@transportesvargas.com",
-        "trafico@transportesvargas.com",
-        "seguridad@transportesvargas.com",
-        "seguridad2@transportesvargas.com",
-        "traficovargasdiaz@gmail.com",
+        "t.foraneo@transportesvargas.com", "manuel.ochoa@transportesvargas.com", 
+        "monitoreo@transportesvargas.com", "seguridadtransportesvargas@gmail.com", 
+        "control@transportesvargas.com", "logistica@transportesvargas.com",
+        "trafico@transportesvargas.com", "seguridad@transportesvargas.com", 
+        "seguridad2@transportesvargas.com", "traficovargasdiaz@gmail.com", 
         "silvia@vargasinterlogistics.com"
       ];
 
@@ -92,49 +126,33 @@ const ModalNuevoViaje = ({
         listaFinalDestinatarios.push(datosNuevoViaje.correoEnvio);
       }
 
-      const destinatariosString = listaFinalDestinatarios.join(", ");
       const tablaNuevoViajeHTML = generarTablaNuevoViajeHTML(nuevoRegistro, datosNuevoViaje);
 
       try {
-        const avisoEnvio = message.loading("Procesando creación de viaje...", 0);
-
         await enviarConBrevo(
-          destinatariosString,
+          listaFinalDestinatarios.join(", "),
           `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${nuevoRegistro.cp} - ${nuevoRegistro.hora}`,
           tablaNuevoViajeHTML
         );
-        
-        avisoEnvio();
 
         await addDoc(collection(db, "logs_envios"), {
           viajeId: docRef.id,
-          destinatarios: destinatariosString,
+          destinatarios: listaFinalDestinatarios.join(", "),
           unidad: datosNuevoViaje.unidad,
           fechaEnvio: new Date().toISOString(),
-          tipo: 'Creación de Viaje (Brevo)'
+          tipo: datosHeredados ? 'Reactivación Tramo (Brevo)' : 'Creación de Viaje (Brevo)'
         });
 
-        message.success(datosNuevoViaje.enviarACliente 
-          ? "Viaje creado y notificado al cliente" 
-          : "Viaje creado y notificado internamente");
+        message.success(datosHeredados ? "¡Nuevo tramo iniciado y notificado!" : "Viaje creado correctamente");
           
       } catch (mailError) {
-        message.destroy();
-        console.error("Error al enviar notificación Brevo:", mailError);
-        message.error(`Viaje guardado, pero el correo falló: ${mailError.message}`);
+        message.error(`Viaje guardado, pero falló el correo: ${mailError.message}`);
       }
 
-      setDatosNuevoViaje({
-        fecha: null, cp: '', hora: null, unidad: undefined, 
-        chofer: undefined, caja: '', cliente: undefined, 
-        origen: '', destino: '', correoEnvio: '', enviarACliente: true, sello: '',
-        movimiento: 'Salida', esExportacion: false
-      });
-      
       onCancel(); // Cerramos el modal
       
     } catch (e) {
-      console.error("Error general en handleCrearViaje:", e);
+      console.error("Error al procesar el viaje:", e);
       message.error("Hubo un problema al procesar el viaje");
     } finally {
       setCargandoViaje(false);
@@ -147,10 +165,20 @@ const ModalNuevoViaje = ({
     <div id="area-modal-nuevo-viaje" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 }}>
       <div style={{ width: '500px', backgroundColor: '#1a1a1a', borderRadius: '8px', border: '1px solid #333', padding: '30px', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '25px', alignItems: 'center' }}>
-          <span style={{ fontSize: '18px', fontWeight: 'bold' }}>Nuevo viaje</span>
+          <span style={{ fontSize: '18px', fontWeight: 'bold' }}>
+            {datosHeredados ? `Iniciar nuevo tramo: Unidad ${datosHeredados.unidad}` : 'Nuevo viaje'}
+          </span>
           <X onClick={onCancel} style={{ cursor: 'pointer', color: '#888' }} />
         </div>
+        
+        {datosHeredados && (
+          <div style={{ marginBottom: '20px', padding: '10px', background: 'rgba(59, 130, 246, 0.1)', borderLeft: '4px solid #3b82f6', fontSize: '12px' }}>
+            Esta unidad viene de un tramo en espera. Al guardar, el tramo anterior se marcará como <b>finalizado</b> automáticamente.
+          </div>
+        )}
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          {/* CAMPOS DEL FORMULARIO */}
           <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Fecha :</label>
             <DatePicker 
               status={!datosNuevoViaje.fecha && "error"}
@@ -165,6 +193,7 @@ const ModalNuevoViaje = ({
               status={!datosNuevoViaje.cp && "error"}
               value={datosNuevoViaje.cp} 
               onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, cp: e.target.value})} 
+              placeholder="Obligatorio"
               style={{ flex: 1, background: '#262626', border: '1px solid #444' }} 
             />
           </div>
@@ -217,30 +246,28 @@ const ModalNuevoViaje = ({
 
           <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Unidad :</label>
             <Select 
+              disabled={!!datosHeredados} // Bloqueado si es nuevo tramo
               status={!datosNuevoViaje.unidad && "error"}
-              showSearch 
-              style={{ flex: 1 }} 
-              placeholder="Selecciona unidad" 
-              value={datosNuevoViaje.unidad} 
+              showSearch style={{ flex: 1 }} value={datosNuevoViaje.unidad} 
               onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, unidad: val})} 
               getPopupContainer={(trigger) => trigger.parentNode}
             >
               {unidades.map(u => <Option key={u.id} value={u.nombre}>{u.nombre}</Option>)}
             </Select>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Chofer :</label>
             <Select 
+              disabled={!!datosHeredados} // Bloqueado si es nuevo tramo
               status={!datosNuevoViaje.chofer && "error"}
-              showSearch 
-              style={{ flex: 1 }} 
-              placeholder="Selecciona chofer" 
-              value={datosNuevoViaje.chofer} 
+              showSearch style={{ flex: 1 }} value={datosNuevoViaje.chofer} 
               onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, chofer: val})} 
               getPopupContainer={(trigger) => trigger.parentNode}
             >
               {choferes.map(ch => <Option key={ch.id} value={ch.nombre}>{ch.nombre}</Option>)}
             </Select>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Caja :</label>
             <SelectInteligente 
               categoria="caja" 
@@ -257,8 +284,7 @@ const ModalNuevoViaje = ({
               onChange={(val) => {
                 const clienteEncontrado = clientes.find(c => c.nombre === val);
                 setDatosNuevoViaje({
-                  ...datosNuevoViaje, 
-                  cliente: val, 
+                  ...datosNuevoViaje, cliente: val, 
                   correoEnvio: clienteEncontrado?.correo || '' 
                 });
               }} 
@@ -269,40 +295,32 @@ const ModalNuevoViaje = ({
           
           <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Origen :</label>
             <SelectInteligente 
-              categoria="origen" 
-              value={datosNuevoViaje.origen} 
+              categoria="origen" value={datosNuevoViaje.origen} 
               onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, origen: val})} 
-              placeholder="Escribe o selecciona origen"
-              sugerencias={sugerencias}
-              eliminarSugerencia={eliminarSugerencia}
+              sugerencias={sugerencias} eliminarSugerencia={eliminarSugerencia}
             />
           </div>
           <div style={{ display: 'flex', alignItems: 'center' }}><label style={{ width: '120px' }}>Destino :</label>
             <SelectInteligente 
-              categoria="destino" 
-              value={datosNuevoViaje.destino} 
+              categoria="destino" value={datosNuevoViaje.destino} 
               onChange={(val) => setDatosNuevoViaje({...datosNuevoViaje, destino: val})} 
-              placeholder="Escribe o selecciona destino"
-              sugerencias={sugerencias}
-              eliminarSugerencia={eliminarSugerencia}
+              sugerencias={sugerencias} eliminarSugerencia={eliminarSugerencia}
             />
           </div>
 
           <div style={{ marginTop: '10px', padding: '15px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '6px', border: '1px solid #3b82f6' }}>
-            <div style={{ marginBottom: '10px' }}>
-              <Checkbox 
-                checked={datosNuevoViaje.enviarACliente} 
-                onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, enviarACliente: e.target.checked})}
-                style={{ color: '#fff', fontWeight: 'bold' }}
-              >
-                Notificar creación de viaje al cliente
-              </Checkbox>
-            </div>
+            <Checkbox 
+              checked={datosNuevoViaje.enviarACliente} 
+              onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, enviarACliente: e.target.checked})}
+              style={{ color: '#fff', fontWeight: 'bold', marginBottom: '10px' }}
+            >
+              Notificar al cliente
+            </Checkbox>
             {datosNuevoViaje.enviarACliente && (
               <>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: '#3b82f6', fontWeight: 'bold' }}>Correo del cliente:</label>
                 <Input 
-                  placeholder="Correo del destinatario (opcional)" 
+                  placeholder="Correo para notificación" 
                   value={datosNuevoViaje.correoEnvio} 
                   onChange={(e) => setDatosNuevoViaje({...datosNuevoViaje, correoEnvio: e.target.value})}
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #3b82f6' }} 
@@ -313,7 +331,9 @@ const ModalNuevoViaje = ({
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
             <Button onClick={onCancel} disabled={cargandoViaje} style={{ background: '#262626', color: '#fff' }}>Cancelar</Button>
-            <Button type="primary" onClick={handleCrearViaje} loading={cargandoViaje}>Crear viaje</Button>
+            <Button type="primary" onClick={handleCrearViaje} loading={cargandoViaje}>
+              {datosHeredados ? 'Iniciar nuevo tramo' : 'Crear viaje'}
+            </Button>
           </div>
         </div>
       </div>
