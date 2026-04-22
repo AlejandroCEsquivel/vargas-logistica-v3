@@ -1,6 +1,6 @@
 // src/components/ModalRastreoEspecial.jsx
 import React from 'react';
-import { Input, Button, Table, Empty, DatePicker, TimePicker, Radio, Switch, message } from 'antd';
+import { Input, Button, Table, DatePicker, TimePicker, Radio, Switch, message } from 'antd';
 import { X, Download } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
@@ -29,6 +29,26 @@ const ModalRastreoEspecial = ({
       message.success("Sello actualizado correctamente");
     } catch (e) {
       message.error("Error al actualizar el sello");
+    }
+  };
+
+  // NUEVA FUNCIÓN: Actualizar Movimiento en vivo
+  const handleActualizarMovimiento = async (e) => {
+    try {
+      await updateDoc(doc(db, "viajes", viaje.id), { movimiento: e.target.value });
+      message.success(`Movimiento cambiado a ${e.target.value}`);
+    } catch (error) {
+      message.error("Error al actualizar el movimiento");
+    }
+  };
+
+  // NUEVA FUNCIÓN: Actualizar Servicio en vivo
+  const handleActualizarServicio = async (checked) => {
+    try {
+      await updateDoc(doc(db, "viajes", viaje.id), { esExportacion: checked });
+      message.success(`Servicio cambiado a ${checked ? 'Exportación' : 'Nacional'}`);
+    } catch (error) {
+      message.error("Error al actualizar el servicio");
     }
   };
 
@@ -70,23 +90,51 @@ const ModalRastreoEspecial = ({
           <X onClick={onCancel} style={{ cursor: 'pointer', color: '#888' }} size={24} />
         </div>
 
+        {/* CABECERA CON NUEVOS CONTROLES DE MOVIMIENTO Y SERVICIO */}
         <div style={{ background: '#262626', padding: '15px', borderRadius: '6px', marginBottom: '20px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', fontSize: '13px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '15px', fontSize: '13px' }}>
             <div><span style={{ color: '#888' }}>Tractor:</span> <br/><b>{viaje.unidad}</b></div>
             <div><span style={{ color: '#888' }}>Remolque:</span> <br/><b>{viaje.caja || 'N/A'}</b></div>
             <div><span style={{ color: '#888' }}>Chofer:</span> <br/><b>{viaje.chofer}</b></div>
             <div><span style={{ color: '#888' }}>Cliente:</span> <br/><b>{viaje.cliente}</b></div>
             <div><span style={{ color: '#888' }}>Carta Porte:</span> <br/><b>{viaje.cp}</b></div>
-            <div>
-              <span style={{ color: '#888' }}>Sello:</span> <br/>
-              <div style={{ display: 'flex', gap: '5px', marginTop: '2px' }}>
-                <Input size="small" value={selloActual} onChange={e => setSelloActual(e.target.value)} style={{ width: '100px', background: '#000', color: '#fff', border: '1px solid #444' }} />
-                <Button size="small" type="primary" onClick={handleActualizarSello}>Guardar</Button>
+            
+            {/* Fila inferior de controles */}
+            <div style={{ gridColumn: '1 / span 2', display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+              <div>
+                <span style={{ color: '#888', display: 'block', marginBottom: '4px' }}>Movimiento:</span>
+                <Radio.Group size="small" value={viaje.movimiento || 'Salida'} onChange={handleActualizarMovimiento}>
+                  <Radio.Button value="Salida">Salida</Radio.Button>
+                  <Radio.Button value="Regreso">Regreso</Radio.Button>
+                </Radio.Group>
+              </div>
+              <div>
+                <span style={{ color: '#888', display: 'block', marginBottom: '4px' }}>Servicio:</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Switch 
+                    size="small"
+                    checked={viaje.esExportacion} 
+                    onChange={handleActualizarServicio} 
+                  />
+                  <span style={{ fontSize: '12px', color: viaje.esExportacion ? '#fbbf24' : '#4ade80', fontWeight: 'bold' }}>
+                    {viaje.esExportacion ? 'Exportación' : 'Nacional'}
+                  </span>
+                </div>
               </div>
             </div>
+
+            <div style={{ gridColumn: '3 / -1' }}>
+              <span style={{ color: '#888' }}>Sello:</span> <br/>
+              <div style={{ display: 'flex', gap: '5px', marginTop: '2px' }}>
+                <Input size="small" value={selloActual} onChange={e => setSelloActual(e.target.value)} style={{ width: '150px', background: '#000', color: '#fff', border: '1px solid #444' }} />
+                <Button size="small" type="primary" onClick={handleActualizarSello}>Guardar Sello</Button>
+              </div>
+            </div>
+
           </div>
         </div>
 
+        {/* FORMULARIO DE AGREGAR PUNTO (Añadido el campo Estatus) */}
         <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '20px', borderRadius: '8px', marginBottom: '20px', border: '1px solid rgba(59, 130, 246, 0.3)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <h3 style={{ margin: 0, fontSize: '14px', color: '#3b82f6', fontWeight: 'bold' }}>AGREGAR PUNTO DE REVISIÓN</h3>
           <div style={{ display: 'flex', gap: '15px', alignItems: 'flex-end' }}>
@@ -102,6 +150,12 @@ const ModalRastreoEspecial = ({
               <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Ubicación</span>
               <SelectInteligente categoria="ubicacion" value={datosNuevoPunto.ubicacion} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, ubicacion: v})} placeholder="Ciudad..." sugerencias={sugerencias} eliminarSugerencia={eliminarSugerencia} />
             </div>
+            {/* NUEVO CAMPO: Estatus */}
+            <div style={{ flex: 1.5 }}>
+              <span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Estatus</span>
+              <SelectInteligente categoria="estatus" value={datosNuevoPunto.estatus} onChange={v => setDatosNuevoPunto({...datosNuevoPunto, estatus: v})} placeholder="Parado, Tránsito..." sugerencias={sugerencias} eliminarSugerencia={eliminarSugerencia} />
+            </div>
+
             <div style={{ flex: 1 }}>
                <Button type="primary" onClick={handleAgregarPunto} style={{ fontWeight: 'bold', width: '100%' }}>Agregar</Button>
             </div>
