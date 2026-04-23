@@ -26,28 +26,49 @@ const ModalBitacora = ({
   const [datosBitacora, setDatosBitacora] = useState({});
   const [bannerBitacora, setBannerBitacora] = useState({ visible: false, mensaje: '', tipo: 'success' });
 
-  // Auto-completar inteligente cuando se abre el modal
+  // 1. CORRECCIÓN DEL BUG: Memoria blindada
   useEffect(() => {
     if (visible) {
       const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera');
-      const nuevasBitacoras = {};
 
-      unidadesEnViaje.forEach(v => {
-        const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
-        const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
+      // Actualizamos el estado respetando lo que el usuario ya escribió
+      setDatosBitacora(prevDatos => {
+        const nuevosDatos = { ...prevDatos };
+        
+        unidadesEnViaje.forEach(v => {
+          // SOLO inicializamos la casilla si está vacía. Si el usuario ya escribió, NO lo tocamos.
+          if (!nuevosDatos[v.unidad]) {
+            const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
+            const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
 
-        nuevasBitacoras[v.unidad] = {
-          cliente: clienteParaMostrar || undefined, 
-          correoEnvio: clienteInfo?.correo || '',
-          enviarACliente: v.estatus === 'espera' ? false : true 
-        };
+            nuevosDatos[v.unidad] = {
+              cliente: clienteParaMostrar || undefined, 
+              correoEnvio: clienteInfo?.correo || '',
+              enviarACliente: v.estatus === 'espera' ? false : true 
+            };
+          }
+        });
+        return nuevosDatos;
       });
 
-      setDatosBitacora(nuevasBitacoras);
-      setUnidadesSeleccionadasBitacora(unidadesEnViaje.map(v => v.unidad));
-      setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' });
+      // Solo seleccionamos todos los camiones si la lista está vacía (la primera vez que abre el modal)
+      setUnidadesSeleccionadasBitacora(prevSeleccion => {
+        if (prevSeleccion.length === 0) {
+          return unidadesEnViaje.map(v => v.unidad);
+        }
+        return prevSeleccion;
+      });
     }
   }, [visible, viajes, clientes]);
+
+  // 2. LIMPIEZA AL CERRAR: Cuando se cierra el modal, reseteamos todo para la próxima vez
+  useEffect(() => {
+    if (!visible) {
+      setDatosBitacora({});
+      setUnidadesSeleccionadasBitacora([]);
+      setBannerBitacora({ visible: false, mensaje: '', tipo: 'success' });
+    }
+  }, [visible]);
 
   const handleInputBitacora = (unidadId, campo, valor) => {
     setDatosBitacora(prev => ({
@@ -80,13 +101,10 @@ const ModalBitacora = ({
       }
 
       const fechaObj = info.fechaReporte ? info.fechaReporte.toDate() : new Date();
-      const fechaTexto = fechaObj.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
       const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
-      
       const fechaYYYYMMDD = info.fechaReporte ? info.fechaReporte.format('YYYY-MM-DD') : new Date().toISOString().split('T')[0];
       const timestampAjustado = dayjs(`${fechaYYYYMMDD} ${horaString}`).valueOf();
 
-      // ESTE ES EL ÚNICO LUGAR DONDE SE DEBE GUARDAR EL PUNTO EN LA BASE DE DATOS
       if (viajeActivo) {
         await addDoc(collection(db, "viajes", viajeActivo.id, "puntos_revision"), {
           fecha: fechaYYYYMMDD, hora: horaString, ubicacion: info.ubicacion || '',
@@ -143,9 +161,6 @@ const ModalBitacora = ({
 
         const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
         const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
-
-        // NOTA DE CORRECCIÓN: Se eliminó el bloque de código que hacía un `addDoc` a la colección `puntos_revision`.
-        // Ahora esta función solo lee los datos de pantalla y arma el correo electrónico, evitando la duplicación.
 
         filasViajesHTML += `
           <tr>
