@@ -26,23 +26,20 @@ const ModalBitacora = ({
   const [datosBitacora, setDatosBitacora] = useState({});
   const [bannerBitacora, setBannerBitacora] = useState({ visible: false, mensaje: '', tipo: 'success' });
 
-  // 1. CORRECCIÓN DEL BUG: Memoria blindada
   useEffect(() => {
     if (visible) {
       const unidadesEnViaje = viajes.filter(v => v.estatus === 'viajes' || v.estatus === 'espera');
 
-      // Actualizamos el estado respetando lo que el usuario ya escribió
       setDatosBitacora(prevDatos => {
         const nuevosDatos = { ...prevDatos };
         
         unidadesEnViaje.forEach(v => {
-          // SOLO inicializamos la casilla si está vacía. Si el usuario ya escribió, NO lo tocamos.
           if (!nuevosDatos[v.unidad]) {
             const clienteParaMostrar = v.estatus === 'espera' ? null : v.cliente;
             const clienteInfo = clienteParaMostrar ? clientes.find(c => c.nombre === clienteParaMostrar) : null;
 
             nuevosDatos[v.unidad] = {
-              cliente: clienteParaMostrar || undefined, 
+              cliente: clienteParaMostrar || '', // CORRECCIÓN: Evitamos undefined usando un string vacío
               correoEnvio: clienteInfo?.correo || '',
               enviarACliente: v.estatus === 'espera' ? false : true 
             };
@@ -51,7 +48,6 @@ const ModalBitacora = ({
         return nuevosDatos;
       });
 
-      // Solo seleccionamos todos los camiones si la lista está vacía (la primera vez que abre el modal)
       setUnidadesSeleccionadasBitacora(prevSeleccion => {
         if (prevSeleccion.length === 0) {
           return unidadesEnViaje.map(v => v.unidad);
@@ -61,7 +57,6 @@ const ModalBitacora = ({
     }
   }, [visible, viajes, clientes]);
 
-  // 2. LIMPIEZA AL CERRAR: Cuando se cierra el modal, reseteamos todo para la próxima vez
   useEffect(() => {
     if (!visible) {
       setDatosBitacora({});
@@ -114,9 +109,19 @@ const ModalBitacora = ({
         });
       }
 
+      // CORRECCIÓN: Armamos el paquete de Firebase asegurando que NADA sea undefined
       const reporteParaFirebase = {
-        unidad: unidadNombre, ...info, fechaReporte: fechaYYYYMMDD,
-        horaString: horaString, link: info.link || 'No proporcionado',
+        unidad: unidadNombre,
+        estatus: info.estatus || '',
+        ubicacion: info.ubicacion || '',
+        velocidad: info.velocidad || '',
+        cliente: info.cliente || '',
+        lugar: info.lugar || '',
+        correoEnvio: info.correoEnvio || '',
+        enviarACliente: info.enviarACliente || false,
+        fechaReporte: fechaYYYYMMDD,
+        horaString: horaString, 
+        link: info.link || 'No proporcionado',
         fechaEnvio: new Date().toISOString(),
       };
       await addDoc(collection(db, "reportes_bitacora"), reporteParaFirebase);
