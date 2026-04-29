@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import dayjs from 'dayjs';
 
-// --- FUNCIÓN 1: REPORTE DETALLADO (EL QUE YA TENÍAS) ---
+// --- FUNCIÓN 1: REPORTE DETALLADO ---
 export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, message) => {
   if (!viajeActivoRastreo) return;
 
@@ -40,11 +40,11 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
 
     worksheet.addRow([]); 
 
-    // Info General
+    // Info General (NUEVO: Se añade el Folio/Clave en la fila 7)
     const row4 = worksheet.addRow(['Camión:', viajeActivoRastreo.unidad, '', 'Chofer:', viajeActivoRastreo.chofer, '']);
     const row5 = worksheet.addRow(['Caja:', viajeActivoRastreo.caja, '', 'Origen:', viajeActivoRastreo.origen, '']);
     const row6 = worksheet.addRow(['Cliente:', viajeActivoRastreo.cliente, '', 'Destino:', viajeActivoRastreo.destino, '']);
-    const row7 = worksheet.addRow(['Carta Porte:', viajeActivoRastreo.cp, '', '', '', '']);
+    const row7 = worksheet.addRow(['Carta Porte:', viajeActivoRastreo.cp, '', 'Folio Interno:', viajeActivoRastreo.clave || 'S/F', '']);
     
     const movText = viajeActivoRastreo.movimiento ? viajeActivoRastreo.movimiento.toUpperCase() : 'SALIDA';
     const expText = viajeActivoRastreo.esExportacion ? 'EXPORTACIÓN EE.UU.' : 'NACIONAL';
@@ -177,7 +177,9 @@ export const generarExcelRastreo = async (viajeActivoRastreo, puntosRevision, me
     worksheet.mergeCells(`D${arrData.number}:E${arrData.number}`);
 
     const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), `SEG-T03_RASTREO_${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.xlsx`);
+    // NUEVO: Nombre del archivo incluye el folio
+    const folioStr = viajeActivoRastreo.clave ? `${viajeActivoRastreo.clave}_` : '';
+    saveAs(new Blob([buffer]), `SEG-T03_RASTREO_${folioStr}${viajeActivoRastreo.unidad}_CP_${viajeActivoRastreo.cp}.xlsx`);
     
   } catch (error) {
     console.error("Error detallado:", error);
@@ -192,13 +194,14 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Reporte General');
 
-    // 1. Columnas ajustadas para mayor espacio
+    // 1. Columnas ajustadas para mayor espacio (NUEVO: Se agrega FOLIO al inicio)
     worksheet.columns = [
+      { header: 'FOLIO', key: 'folio', width: 14 },     // <-- COLUMNA NUEVA
       { header: 'UNIDAD', key: 'unidad', width: 12 },
       { header: 'CHOFER', key: 'chofer', width: 35 },
       { header: 'CARTA PORTE', key: 'cp', width: 18 },
-      { header: 'ORIGEN', key: 'origen', width: 45 },   // <-- Más ancho
-      { header: 'DESTINO', key: 'destino', width: 50 }, // <-- Más ancho
+      { header: 'ORIGEN', key: 'origen', width: 45 },
+      { header: 'DESTINO', key: 'destino', width: 50 }, 
       { header: 'CLIENTE', key: 'cliente', width: 30 },
       { header: 'MOVIMIENTO', key: 'movimiento', width: 15 },
       { header: 'SERVICIO', key: 'servicio', width: 20 },
@@ -211,7 +214,7 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
     const borderStyleLight = { top: {style:'thin'}, left: {style:'thin'}, bottom: {style:'thin'}, right: {style:'thin'} };
 
     headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } }; // Azul oscuro institucional
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F497D' } }; 
       cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
       cell.border = borderStyleLight;
@@ -232,6 +235,7 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
       }
 
       const row = worksheet.addRow({
+        folio: viaje.clave || 'S/F', // <-- NUEVO DATO
         unidad: viaje.unidad || '-',
         chofer: viaje.chofer || '-',
         cp: viaje.cp || 'Pendiente',
@@ -247,20 +251,20 @@ export const generarExcelGeneral = async (viajesFiltrados) => {
       // Lógica de "Cebra": Si el índice es par, el fondo es blanco. Si es impar, es un gris clarito.
       const isEven = index % 2 === 0;
       const rowFill = isEven 
-        ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } } // Blanco
-        : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F9F9' } }; // Gris súper clarito
+        ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } } 
+        : { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F9F9' } }; 
 
-      // 4. Formato de las filas de datos (Wrap Text, Alineación, Cebra y Bordes)
+      // 4. Formato de las filas de datos
       row.eachCell((cell, colNumber) => {
-        // Aplicar el fondo cebra y el borde tenue a TODAS las celdas de esta fila
         cell.fill = rowFill;
         cell.border = borderStyleLight;
 
-        // Centrar columnas clave: Unidad(1), CP(3), Movimiento(7), Servicio(8), Salida(9), Llegada(10)
-        if ([1, 3, 7, 8, 9, 10].includes(colNumber)) {
+        // Centrar columnas clave actualizadas (ahora todo se movió un número a la derecha):
+        // Folio(1), Unidad(2), CP(4), Movimiento(8), Servicio(9), Salida(10), Llegada(11)
+        if ([1, 2, 4, 8, 9, 10, 11].includes(colNumber)) {
           cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
         } else {
-          // Alinear a la izquierda textos largos: Chofer(2), Origen(4), Destino(5), Cliente(6)
+          // Alinear a la izquierda textos largos: Chofer(3), Origen(5), Destino(6), Cliente(7)
           cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
         }
       });

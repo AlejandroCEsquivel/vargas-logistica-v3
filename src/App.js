@@ -33,7 +33,7 @@ function App() {
 
   // ESTADOS DE MODALES Y HERENCIA
   const [mostrarModalNuevoViaje, setMostrarModalNuevoViaje] = useState(false);
-  const [datosHeredados, setDatosHeredados] = useState(null); // <-- Nuevo estado para guardar la herencia
+  const [datosHeredados, setDatosHeredados] = useState(null); 
   const [mostrarModalBitacora, setMostrarModalBitacora] = useState(false);
   const [mostrarModalRastreo, setMostrarModalRastreo] = useState(false);
   const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
@@ -152,7 +152,6 @@ function App() {
     } catch (e) { message.error("No se pudo remover la unidad"); }
   };
 
-  // <-- NUEVA FUNCIÓN PARA INICIAR NUEVO TRAMO -->
   const handleIniciarNuevoTramo = (viajeEnEspera) => {
     setDatosHeredados(viajeEnEspera);
     setMostrarModalNuevoViaje(true);
@@ -252,10 +251,10 @@ function App() {
     );
   };
 
-  // LÓGICA DE REPORTES
+  // LÓGICA DE REPORTES (AHORA INCLUYE BÚSQUEDA POR CLAVE)
   const viajesFiltradosReportes = viajes.filter(v => {
     const termino = textoBusqueda.toLowerCase();
-    const coincideTexto = !termino || ((v.unidad?.toLowerCase().includes(termino)) || (v.chofer?.toLowerCase().includes(termino)) || (v.cliente?.toLowerCase().includes(termino)) || (v.cp?.toLowerCase().includes(termino)) || (v.origen?.toLowerCase().includes(termino)) || (v.destino?.toLowerCase().includes(termino)));
+    const coincideTexto = !termino || ((v.clave?.toLowerCase().includes(termino)) || (v.unidad?.toLowerCase().includes(termino)) || (v.chofer?.toLowerCase().includes(termino)) || (v.cliente?.toLowerCase().includes(termino)) || (v.cp?.toLowerCase().includes(termino)) || (v.origen?.toLowerCase().includes(termino)) || (v.destino?.toLowerCase().includes(termino)));
     let coincideFecha = true;
     if (rangoFechas && rangoFechas[0] && rangoFechas[1] && v.fecha) {
       const fechaViaje = dayjs(v.fecha);
@@ -329,6 +328,7 @@ function App() {
                           </div>
                         )
                       },
+                      { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> }, // COLUMNA NUEVA
                       { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
                       { title: 'Unidad', dataIndex: 'unidad', render: (text, record) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{text}</span>{renderTagsViaje(record)}</div>) },
                       { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Cliente', dataIndex: 'cliente' }
@@ -342,7 +342,7 @@ function App() {
                       {obtenerDatosTabla().length === 0 ? <div style={{ gridColumn: '1 / -1', textAlign: 'center' }}><Empty description="No hay unidades en espera" /></div> : obtenerDatosTabla().map(v => (
                         <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #333' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
-                            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{v.unidad}</span>
+                            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{v.unidad} <span style={{ fontSize: '16px', color: '#3b82f6', marginLeft: '6px' }}>{v.clave ? `(${v.clave})` : ''}</span></span> {/* FOLIO AÑADIDO */}
                             <span style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>Chofer: {v.chofer}</span>
                             <span style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>Destino Ant: {v.destino || 'N/A'}</span>
                             {renderTagsViaje(v)}
@@ -381,6 +381,7 @@ function App() {
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
               <Table dataSource={viajes.filter(v => v.estatus === 'finalizado')} rowKey="id" size="small" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes finalizados aún" /> }}
                 columns={[
+                  { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> }, // COLUMNA NUEVA
                   { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
                   { title: 'Unidad', dataIndex: 'unidad', render: (text, record) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{text}</span>{renderTagsViaje(record)}</div>) },
                   { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Cliente', dataIndex: 'cliente' }
@@ -393,7 +394,7 @@ function App() {
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
               <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span><Input prefix={<Search size={16} color="#666" />} placeholder="Buscar..." value={textoBusqueda} onChange={(e) => setTextoBusqueda(e.target.value)} style={{ background: '#262626', border: '1px solid #444', color: '#fff' }} allowClear /></div>
+                <div style={{ flex: 1, minWidth: '200px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span><Input prefix={<Search size={16} color="#666" />} placeholder="Buscar unidad, folio, cliente..." value={textoBusqueda} onChange={(e) => setTextoBusqueda(e.target.value)} style={{ background: '#262626', border: '1px solid #444', color: '#fff' }} allowClear /></div>
                 <div style={{ width: '250px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span><RangePicker style={{ width: '100%' }} value={rangoFechas} onChange={setRangoFechas} getPopupContainer={t => t.parentNode} /></div>
                 <div style={{ width: '150px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span><Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Salida">Salida</Option><Option value="Regreso">Regreso</Option></Select></div>
                 <div style={{ width: '180px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span><Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Nacional">Nacional 🇲🇽</Option><Option value="Exportacion">Exportación 🇺🇸</Option></Select></div>
@@ -412,6 +413,7 @@ function App() {
               </div>
               <Table dataSource={viajesFiltradosReportes} size="small" rowKey="id" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
                 columns={[
+                  { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> }, // COLUMNA NUEVA
                   { title: 'Unidad', render: (_, r) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{r.unidad}</span>{renderTagsViaje(r)}</div>) },
                   { title: 'Salida', dataIndex: 'salida' }, { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Llegada', dataIndex: 'llegada' },
                   { title: 'Acciones', render: (_, record) => (<Button danger size="small" onClick={() => { setViajeActivoRastreo(record); setSelloActual(record.sello || 'Pendiente'); setMostrarModalRastreo(true); }} style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}>Rastreo especial de viaje</Button>) }
@@ -453,9 +455,9 @@ function App() {
           visible={mostrarModalNuevoViaje} 
           onCancel={() => {
             setMostrarModalNuevoViaje(false);
-            setDatosHeredados(null); // <-- Limpiamos la herencia al cerrar
+            setDatosHeredados(null);
           }} 
-          datosHeredados={datosHeredados} // <-- Pasamos los datos al modal
+          datosHeredados={datosHeredados}
           unidades={unidades} choferes={choferes} clientes={clientes} viajes={viajes} 
           sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} 
           eliminarSugerencia={eliminarSugerencia} 

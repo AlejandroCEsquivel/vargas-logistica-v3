@@ -163,13 +163,14 @@ const ModalBitacora = ({
         const viajeActivo = viajes.find(v => v.unidad === nombreUnidad && (v.estatus === 'viajes' || v.estatus === 'espera'));
         const chofer = viajeActivo?.chofer || "";
         const remolque = viajeActivo?.caja || "";
+        const folioInterno = viajeActivo?.clave || 'S/F'; // <-- NUEVO: OBTENEMOS EL FOLIO
 
         const fechaCorta = info.fechaReporte ? info.fechaReporte.format('DD/MM/YYYY') : new Date().toLocaleDateString('es-MX');
         const horaString = info.horaReporte ? info.horaReporte.format('HH:mm') : new Date().toLocaleTimeString('es-MX', {hour: '2-digit', minute:'2-digit', hour12: false});
 
         filasViajesHTML += `
           <tr>
-            <td style="border: 1px solid #000; padding: 5px;">${nombreUnidad}</td>
+            <td style="border: 1px solid #000; padding: 5px; text-align: center; font-weight: bold; color: #1F497D;">${folioInterno}</td> <td style="border: 1px solid #000; padding: 5px;">${nombreUnidad}</td>
             <td style="border: 1px solid #000; padding: 5px;">${fechaCorta} ${horaString}</td>
             <td style="border: 1px solid #000; padding: 5px;">${chofer}</td>
             <td style="border: 1px solid #000; padding: 5px;">${remolque}</td>

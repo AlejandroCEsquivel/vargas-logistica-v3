@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { DatePicker, TimePicker, Select, Button, Input, Radio, Checkbox, Switch, message } from 'antd';
 import { X } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore'; // Cambiamos deleteDoc por updateDoc
+import { collection, addDoc, updateDoc, doc, runTransaction } from 'firebase/firestore'; // <-- Añadimos runTransaction
 import { enviarConBrevo } from '../services/brevoService';
 import { generarTablaNuevoViajeHTML } from '../services/emailTemplates';
 import SelectInteligente from './SelectInteligente';
@@ -20,7 +20,7 @@ const ModalNuevoViaje = ({
   sugerencias, 
   guardarSugerenciaAutomatica, 
   eliminarSugerencia,
-  datosHeredados // <-- Nueva prop para recibir datos del tramo anterior
+  datosHeredados
 }) => {
   const [cargandoViaje, setCargandoViaje] = useState(false);
   const [datosNuevoViaje, setDatosNuevoViaje] = useState({
@@ -94,9 +94,32 @@ const ModalNuevoViaje = ({
       await guardarSugerenciaAutomatica('origen', datosNuevoViaje.origen);
       await guardarSugerenciaAutomatica('destino', datosNuevoViaje.destino);
 
-      // 3. CREAR EL NUEVO REGISTRO
+      // --- 3. NUEVA LÓGICA: GENERAR FOLIO AUTOMÁTICO ---
+      const contadorRef = doc(db, "Configuracion", "contador_viajes");
+      const folioGenerado = await runTransaction(db, async (transaction) => {
+        const contadorDoc = await transaction.get(contadorRef);
+        
+        if (!contadorDoc.exists()) {
+          throw new Error("No se encontró el contador de viajes en Firebase");
+        }
+
+        const nuevoNumero = contadorDoc.data().ultimoFolio + 1;
+        const prefijo = contadorDoc.data().prefijo;
+        
+        // Formatear a 3 dígitos (001, 002, etc.)
+        const numeroFormateado = nuevoNumero.toString().padStart(3, '0');
+        const claveCompleta = `${prefijo}${numeroFormateado}`;
+
+        // Actualizar el contador en la base de datos
+        transaction.update(contadorRef, { ultimoFolio: nuevoNumero });
+
+        return claveCompleta;
+      });
+
+      // 4. CREAR EL NUEVO REGISTRO
       const nuevoRegistro = {
         ...datosNuevoViaje,
+        clave: folioGenerado, // <-- GUARDAMOS LA CLAVE AQUÍ
         cp: datosNuevoViaje.cp || 'Pendiente', 
         fecha: datosNuevoViaje.fecha ? datosNuevoViaje.fecha.format('YYYY-MM-DD') : '',
         hora: datosNuevoViaje.hora ? datosNuevoViaje.hora.format('HH:mm') : '',
@@ -111,7 +134,7 @@ const ModalNuevoViaje = ({
 
       const docRef = await addDoc(collection(db, "viajes"), nuevoRegistro);
 
-      // 4. NOTIFICACIONES (BREVO)
+      // 5. NOTIFICACIONES (BREVO)
       const correosInternos = [
         "t.foraneo@transportesvargas.com", "manuel.ochoa@transportesvargas.com", 
         "monitoreo@transportesvargas.com", "seguridadtransportesvargas@gmail.com", 
@@ -131,7 +154,7 @@ const ModalNuevoViaje = ({
       try {
         await enviarConBrevo(
           listaFinalDestinatarios.join(", "),
-          `NUEVO VIAJE - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${nuevoRegistro.cp} - ${nuevoRegistro.hora}`,
+          `NUEVO VIAJE - FOLIO ${folioGenerado} - UNIDAD ${datosNuevoViaje.unidad} - CARTA PORTE ${nuevoRegistro.cp}`, // <-- AÑADIDO AL ASUNTO
           tablaNuevoViajeHTML
         );
 
@@ -143,10 +166,10 @@ const ModalNuevoViaje = ({
           tipo: datosHeredados ? 'Reactivación Tramo (Brevo)' : 'Creación de Viaje (Brevo)'
         });
 
-        message.success(datosHeredados ? "¡Nuevo tramo iniciado y notificado!" : "Viaje creado correctamente");
+        message.success(datosHeredados ? `¡Nuevo tramo iniciado! Folio: ${folioGenerado}` : `Viaje creado correctamente. Folio: ${folioGenerado}`);
           
       } catch (mailError) {
-        message.error(`Viaje guardado, pero falló el correo: ${mailError.message}`);
+        message.error(`Viaje guardado (Folio: ${folioGenerado}), pero falló el correo: ${mailError.message}`);
       }
 
       onCancel(); // Cerramos el modal

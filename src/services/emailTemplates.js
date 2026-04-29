@@ -6,7 +6,11 @@ export const generarTablaNuevoViajeHTML = (nuevoRegistro, datosNuevoViaje) => `
     <table style="width: 100%; max-width: 800px; border-collapse: collapse; border: 1px solid #000; font-size: 12px; margin-top: 5px;">
       <tbody>
         <tr>
-          <td style="border: 1px solid #000; padding: 5px; width: 30%;">Fecha y hora de salida:</td>
+          <td style="border: 1px solid #000; padding: 5px; width: 30%; font-weight: bold; background-color: #f2f2f2;">Folio Interno:</td>
+          <td style="border: 1px solid #000; padding: 5px; font-weight: bold; background-color: #f2f2f2;">${nuevoRegistro.clave || 'S/F'}</td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid #000; padding: 5px;">Fecha y hora de salida:</td>
           <td style="border: 1px solid #000; padding: 5px;">${nuevoRegistro.fecha} ${nuevoRegistro.hora}</td>
         </tr>
         <tr>
@@ -54,6 +58,7 @@ export const generarTablaNuevoViajeHTML = (nuevoRegistro, datosNuevoViaje) => `
   </div>
 `;
 
+// EN ESTE REPORTE INDIVIDUAL NO AGREGAMOS FOLIO PARA NO SOBRECARGAR LA PANTALLA DEL CLIENTE. SE MANTIENE IGUAL.
 export const generarContenidoHtmlIndividual = (unidadNombre, horaString, chofer, remolque, info) => `
   <div style="font-family: 'Times New Roman', serif; color: #000; font-size: 13px;">
     <p><b>Reporte de Estatus Individual - Transporte Vargas</b></p>
@@ -95,7 +100,7 @@ export const generarTablaConsolidadaHTML = (filasViajesHTML, filasYardaHTML) => 
     <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 11px; margin-bottom: 20px;">
       <thead>
         <tr style="background-color: #f2f2f2;">
-          <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
+          <th style="border: 1px solid #000; padding: 5px;">Folio</th> <th style="border: 1px solid #000; padding: 5px;">Vehiculo</th>
           <th style="border: 1px solid #000; padding: 5px;">Fecha/Hora</th>
           <th style="border: 1px solid #000; padding: 5px;">Chofer</th>
           <th style="border: 1px solid #000; padding: 5px;">Remolque</th>
