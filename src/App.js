@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Home, History, FileText, Settings, Truck, Clock, Warehouse, Search, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
 import { DatePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd'; 
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { collection, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import dayjs from 'dayjs';
 import 'antd/dist/reset.css';
 
-// IMPORTACIÓN DE COMPONENTES Y SERVICIOS MODULARES
 import HistorialViaje from './components/HistorialViaje';
 import ModalNuevoViaje from './components/ModalNuevoViaje';
 import ModalBitacora from './components/ModalBitacora';
@@ -23,7 +23,12 @@ function App() {
   const [vistaActual, setVistaActual] = useState('inicio');
   const [pestañaActiva, setPestañaActiva] = useState('viajes');
   
-  // ESTADOS DE DATOS
+  const [usuario, setUsuario] = useState(null);
+  const [cargandoUsuario, setCargandoUsuario] = useState(true);
+  const [correo, setCorreo] = useState('');
+  const [contrasena, setContrasena] = useState('');
+  const [errorIngreso, setErrorIngreso] = useState('');
+
   const [unidades, setUnidades] = useState([]);
   const [choferes, setChoferes] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -31,7 +36,6 @@ function App() {
   const [reportes, setReportes] = useState([]); 
   const [sugerencias, setSugerencias] = useState({ estatus: [], ubicacion: [], velocidad: [], lugar: [], caja: [], origen: [], destino: [] });
 
-  // ESTADOS DE MODALES Y HERENCIA
   const [mostrarModalNuevoViaje, setMostrarModalNuevoViaje] = useState(false);
   const [datosHeredados, setDatosHeredados] = useState(null); 
   const [mostrarModalBitacora, setMostrarModalBitacora] = useState(false);
@@ -39,7 +43,6 @@ function App() {
   const [mostrarModalMotivo, setMostrarModalMotivo] = useState(false);
   const [modalTerminarVisible, setModalTerminarVisible] = useState(false);
 
-  // ESTADOS DE SELECCIÓN Y EDICIÓN
   const [viajeActivoRastreo, setViajeActivoRastreo] = useState(null);
   const [puntosRevision, setPuntosRevision] = useState([]);
   const [unidadAfectada, setUnidadAfectada] = useState(null);
@@ -47,7 +50,6 @@ function App() {
   const [selloActual, setSelloActual] = useState('');
   const [motivoSeleccionado, setMotivoSeleccionado] = useState('Taller');
   
-  // ESTADOS CONFIGURACION
   const [editandoId, setEditandoId] = useState(null);
   const [tipoEdicion, setTipoEdicion] = useState(null);
   const [nuevoVehiculo, setNuevoVehiculo] = useState('');
@@ -55,13 +57,33 @@ function App() {
   const [nuevoCliente, setNuevoCliente] = useState('');
   const [correoNuevo, setCorreoNuevo] = useState('');
 
-  // ESTADOS REPORTES
   const [textoBusqueda, setTextoBusqueda] = useState('');
   const [rangoFechas, setRangoFechas] = useState(null);
   const [filtroMovimiento, setFiltroMovimiento] = useState('Todos');
   const [filtroServicio, setFiltroServicio] = useState('Todos');
 
-  // FUNCIONES DE CARGA Y FIREBASE
+  useEffect(() => {
+    const desuscribir = onAuthStateChanged(auth, (usuarioDetectado) => {
+      setUsuario(usuarioDetectado);
+      setCargandoUsuario(false);
+    });
+    return () => desuscribir();
+  }, []);
+
+  const manejarIngreso = async (e) => {
+    e.preventDefault();
+    try {
+      await signInWithEmailAndPassword(auth, correo, contrasena);
+      setErrorIngreso('');
+    } catch (error) {
+      setErrorIngreso('Credenciales incorrectas');
+    }
+  };
+
+  const manejarSalida = async () => {
+    await signOut(auth);
+  };
+
   const cargarSugerencias = async () => {
     try {
       const snap = await getDocs(collection(db, "sugerencias_menu"));
@@ -76,7 +98,7 @@ function App() {
         destino: docs.filter(d => d.categoria === 'destino')
       });
     } catch (e) {
-      console.error("Error cargando sugerencias:", e);
+      console.error(e);
     }
   };
 
@@ -101,13 +123,12 @@ function App() {
     return () => unsubscribe();
   }, [viajeActivoRastreo]);
 
-  // FUNCIONES DE LÓGICA Y EVENTOS
   const toggleMovimiento = async (viaje) => {
     try {
       const nuevoMov = viaje.movimiento === 'Salida' ? 'Regreso' : 'Salida';
       await updateDoc(doc(db, "viajes", viaje.id), { movimiento: nuevoMov });
       message.success(`Cambiado a ${nuevoMov}`);
-    } catch (error) { message.error("Error al cambiar movimiento"); }
+    } catch (error) { message.error("Error al cambiar"); }
   };
 
   const toggleServicio = async (viaje) => {
@@ -115,7 +136,7 @@ function App() {
       const nuevoServ = !viaje.esExportacion;
       await updateDoc(doc(db, "viajes", viaje.id), { esExportacion: nuevoServ });
       message.success(`Cambiado a ${nuevoServ ? 'Exportación' : 'Nacional'}`);
-    } catch (error) { message.error("Error al cambiar servicio"); }
+    } catch (error) { message.error("Error al cambiar"); }
   };
 
   const guardarSugerenciaAutomatica = async (categoria, valor) => {
@@ -125,7 +146,7 @@ function App() {
       try {
         await addDoc(collection(db, "sugerencias_menu"), { categoria, valor: valor.trim() });
         cargarSugerencias();
-      } catch (e) { console.error("Error guardando sugerencia"); }
+      } catch (e) { message.error("Error"); }
     }
   };
 
@@ -141,15 +162,15 @@ function App() {
   const handleMoverAEspera = async (viajeId) => {
     try {
       await updateDoc(doc(db, "viajes", viajeId), { estatus: 'espera', fechaFinalizacion: new Date().toISOString() });
-      message.success("Viaje enviado a espera de carga");
-    } catch (e) { message.error("No se pudo actualizar el viaje"); }
+      message.success("Viaje enviado a espera");
+    } catch (e) { message.error("Error"); }
   };
 
   const handleEliminarEspera = async (id) => {
     try {
       await deleteDoc(doc(db, "viajes", id));
-      message.success("Unidad removida de espera correctamente");
-    } catch (e) { message.error("No se pudo remover la unidad"); }
+      message.success("Unidad removida");
+    } catch (e) { message.error("Error"); }
   };
 
   const handleIniciarNuevoTramo = (viajeEnEspera) => {
@@ -163,8 +184,8 @@ function App() {
       const registroEnEspera = viajes.find(v => v.unidad === viajeATerminar.unidad && v.estatus === 'espera' && v.id !== viajeATerminar.id);
       if (registroEnEspera) await deleteDoc(doc(db, "viajes", registroEnEspera.id));
       setModalTerminarVisible(false);
-      message.success("Viaje finalizado correctamente");
-    } catch (e) { message.error("No se pudo finalizar el viaje"); }
+      message.success("Viaje finalizado");
+    } catch (e) { message.error("Error"); }
   };
 
   const handleAccionDisponibilidad = async (record) => {
@@ -174,20 +195,19 @@ function App() {
     } else {
       try {
         await updateDoc(doc(db, "vehiculos", record.id), { estado: 'Listo' });
-        message.success(`Unidad ${record.nombre} habilitada correctamente`);
-      } catch (e) { message.error("Error al habilitar unidad"); }
+        message.success(`Unidad habilitada`);
+      } catch (e) { message.error("Error"); }
     }
   };
 
   const confirmarDeshabilitar = async () => {
     try {
       await updateDoc(doc(db, "vehiculos", unidadAfectada.id), { estado: motivoSeleccionado });
-      message.warning(`Unidad ${unidadAfectada.nombre} enviada a: ${motivoSeleccionado}`);
+      message.warning(`Unidad enviada a: ${motivoSeleccionado}`);
       setMostrarModalMotivo(false);
-    } catch (e) { message.error("Error al actualizar estado"); }
+    } catch (e) { message.error("Error"); }
   };
 
-  // FUNCIONES DE CONFIGURACIÓN
   const prepararEdicion = (coleccion, record) => {
     setEditandoId(record.id);
     setTipoEdicion(coleccion);
@@ -224,7 +244,7 @@ function App() {
       }
       setEditandoId(null); setTipoEdicion(null);
       message.success("Registro guardado");
-    } catch (e) { message.error("Error al procesar la solicitud"); }
+    } catch (e) { message.error("Error"); }
   };
 
   const handleEliminar = async (coleccion, id) => {
@@ -236,7 +256,6 @@ function App() {
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
 
-  // ETIQUETAS VISUALES
   const renderTagsViaje = (viaje, isEditable = false) => {
     if (!viaje) return null;
     return (
@@ -251,7 +270,6 @@ function App() {
     );
   };
 
-  // LÓGICA DE REPORTES (AHORA INCLUYE BÚSQUEDA POR CLAVE)
   const viajesFiltradosReportes = viajes.filter(v => {
     const termino = textoBusqueda.toLowerCase();
     const coincideTexto = !termino || ((v.clave?.toLowerCase().includes(termino)) || (v.unidad?.toLowerCase().includes(termino)) || (v.chofer?.toLowerCase().includes(termino)) || (v.cliente?.toLowerCase().includes(termino)) || (v.cp?.toLowerCase().includes(termino)) || (v.origen?.toLowerCase().includes(termino)) || (v.destino?.toLowerCase().includes(termino)));
@@ -265,7 +283,6 @@ function App() {
     return coincideTexto && coincideFecha && coincideMovimiento && coincideServicio;
   });
 
-  // FUNCIÓN PARA EXPORTAR REPORTE GENERAL
   const handleDescargarReporteMasivo = async () => {
     if (viajesFiltradosReportes.length === 0) {
       return message.warning("No hay viajes en la tabla para exportar.");
@@ -280,11 +297,30 @@ function App() {
     }
   };
 
+  if (cargandoUsuario) {
+    return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000', color: '#fff' }}>Cargando sistema...</div>;
+  }
+
+  if (!usuario) {
+    return (
+      <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
+        <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
+          <div style={{ width: '350px', padding: '40px', background: '#141414', borderRadius: '8px', border: '1px solid #333', textAlign: 'center' }}>
+            <h2 style={{ marginBottom: '30px' }}>Transportes Vargas</h2>
+            <Input placeholder="Correo" value={correo} onChange={(e) => setCorreo(e.target.value)} style={{ marginBottom: '15px', background: '#262626', border: '1px solid #444', color: '#fff' }} />
+            <Input.Password placeholder="Contraseña" value={contrasena} onChange={(e) => setContrasena(e.target.value)} style={{ marginBottom: '20px', background: '#262626', border: '1px solid #444', color: '#fff' }} />
+            {errorIngreso && <p style={{ color: '#ff4d4f', marginBottom: '15px', fontSize: '12px' }}>{errorIngreso}</p>}
+            <Button type="primary" onClick={manejarIngreso} style={{ width: '100%', backgroundColor: '#007bff', fontWeight: 'bold', height: '40px' }}>Ingresar</Button>
+          </div>
+        </div>
+      </ConfigProvider>
+    );
+  }
+
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
         
-        {/* NAVEGACIÓN LATERAL */}
         <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #1a1a1a', padding: '20px 15px' }}>
           <div style={{ color: '#666', fontSize: '13px', fontWeight: 'bold', marginBottom: '40px', paddingLeft: '10px' }}>Bitacora de foraneo</div>
           <nav>
@@ -292,10 +328,10 @@ function App() {
             <div onClick={() => setVistaActual('historial')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'historial' ? '#1a1a1a' : 'transparent', fontSize: '18px', marginBottom: '8px' }}><History size={22} /> Historial</div>
             <div onClick={() => setVistaActual('reportes')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'reportes' ? '#1a1a1a' : 'transparent', fontSize: '18px', marginBottom: '8px' }}><FileText size={22} /> Reportes</div>
             <div onClick={() => setVistaActual('configuracion')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'configuracion' ? '#1a1a1a' : 'transparent', fontSize: '18px' }}><Settings size={22} /> Configuracion</div>
+            <div onClick={manejarSalida} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: 'transparent', fontSize: '18px', color: '#ff4d4f', marginTop: '20px' }}>Salir del sistema</div>
           </nav>
         </div>
 
-        {/* CONTENIDO PRINCIPAL */}
         <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
           
           {vistaActual === 'inicio' && (
@@ -328,7 +364,7 @@ function App() {
                           </div>
                         )
                       },
-                      { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> }, // COLUMNA NUEVA
+                      { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> },
                       { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
                       { title: 'Unidad', dataIndex: 'unidad', render: (text, record) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{text}</span>{renderTagsViaje(record)}</div>) },
                       { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Cliente', dataIndex: 'cliente' }
@@ -342,7 +378,7 @@ function App() {
                       {obtenerDatosTabla().length === 0 ? <div style={{ gridColumn: '1 / -1', textAlign: 'center' }}><Empty description="No hay unidades en espera" /></div> : obtenerDatosTabla().map(v => (
                         <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '15px', background: '#141414', padding: '20px', borderRadius: '8px', border: '1px solid #333' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', flex: 1 }}>
-                            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{v.unidad} <span style={{ fontSize: '16px', color: '#3b82f6', marginLeft: '6px' }}>{v.clave ? `(${v.clave})` : ''}</span></span> {/* FOLIO AÑADIDO */}
+                            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{v.unidad} <span style={{ fontSize: '16px', color: '#3b82f6', marginLeft: '6px' }}>{v.clave ? `(${v.clave})` : ''}</span></span>
                             <span style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>Chofer: {v.chofer}</span>
                             <span style={{ fontSize: '13px', color: '#888', marginBottom: '8px' }}>Destino Ant: {v.destino || 'N/A'}</span>
                             {renderTagsViaje(v)}
@@ -381,7 +417,7 @@ function App() {
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
               <Table dataSource={viajes.filter(v => v.estatus === 'finalizado')} rowKey="id" size="small" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes finalizados aún" /> }}
                 columns={[
-                  { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> }, // COLUMNA NUEVA
+                  { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> },
                   { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
                   { title: 'Unidad', dataIndex: 'unidad', render: (text, record) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{text}</span>{renderTagsViaje(record)}</div>) },
                   { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Cliente', dataIndex: 'cliente' }
@@ -399,7 +435,6 @@ function App() {
                 <div style={{ width: '150px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span><Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Salida">Salida</Option><Option value="Regreso">Regreso</Option></Select></div>
                 <div style={{ width: '180px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span><Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Nacional">Nacional 🇲🇽</Option><Option value="Exportacion">Exportación 🇺🇸</Option></Select></div>
                 
-                {/* BOTÓN DE EXPORTAR AL LADO DE LOS FILTROS */}
                 <div style={{ display: 'flex', alignItems: 'flex-end', marginLeft: 'auto' }}>
                   <Button 
                     type="primary" 
@@ -413,7 +448,7 @@ function App() {
               </div>
               <Table dataSource={viajesFiltradosReportes} size="small" rowKey="id" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
                 columns={[
-                  { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> }, // COLUMNA NUEVA
+                  { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> },
                   { title: 'Unidad', render: (_, r) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{r.unidad}</span>{renderTagsViaje(r)}</div>) },
                   { title: 'Salida', dataIndex: 'salida' }, { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Llegada', dataIndex: 'llegada' },
                   { title: 'Acciones', render: (_, record) => (<Button danger size="small" onClick={() => { setViajeActivoRastreo(record); setSelloActual(record.sello || 'Pendiente'); setMostrarModalRastreo(true); }} style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}>Rastreo especial de viaje</Button>) }
@@ -450,7 +485,6 @@ function App() {
 
         </div>
 
-        {/* MODALES EXTERNOS */}
         <ModalNuevoViaje 
           visible={mostrarModalNuevoViaje} 
           onCancel={() => {
