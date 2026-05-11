@@ -23,12 +23,14 @@ function App() {
   const [vistaActual, setVistaActual] = useState('inicio');
   const [pestañaActiva, setPestañaActiva] = useState('viajes');
   
+  // ESTADOS DE AUTENTICACIÓN
   const [usuario, setUsuario] = useState(null);
   const [cargandoUsuario, setCargandoUsuario] = useState(true);
   const [correo, setCorreo] = useState('');
   const [contrasena, setContrasena] = useState('');
   const [errorIngreso, setErrorIngreso] = useState('');
 
+  // ESTADOS DE DATOS
   const [unidades, setUnidades] = useState([]);
   const [choferes, setChoferes] = useState([]);
   const [clientes, setClientes] = useState([]);
@@ -61,6 +63,7 @@ function App() {
   const [filtroMovimiento, setFiltroMovimiento] = useState('Todos');
   const [filtroServicio, setFiltroServicio] = useState('Todos');
 
+  // EFECTO DE AUTENTICACIÓN
   useEffect(() => {
     const desuscribir = onAuthStateChanged(auth, (usuarioDetectado) => {
       setUsuario(usuarioDetectado);
@@ -69,7 +72,8 @@ function App() {
     return () => desuscribir();
   }, []);
 
-  const manejarIngreso = async () => {
+  const manejarIngreso = async (e) => {
+    if (e) e.preventDefault();
     if (!correo || !contrasena) return;
     try {
       await signInWithEmailAndPassword(auth, correo, contrasena);
@@ -104,6 +108,7 @@ function App() {
     }
   };
 
+  // CARGA DE DATOS SOLO SI HAY USUARIO
   useEffect(() => {
     if (!usuario) return;
 
@@ -133,6 +138,7 @@ function App() {
     return () => unsubscribe();
   }, [viajeActivoRastreo]);
 
+  // FUNCIONES DE LOGÍSTICA (MANTENIDAS)
   const toggleMovimiento = async (viaje) => {
     try {
       const nuevoMov = viaje.movimiento === 'Salida' ? 'Regreso' : 'Salida';
@@ -306,6 +312,7 @@ function App() {
     }
   };
 
+  // PANTALLA DE CARGA INICIAL
   if (cargandoUsuario) {
     return (
       <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000' }}>
@@ -314,6 +321,7 @@ function App() {
     );
   }
 
+  // INTERFAZ DE LOGIN
   if (!usuario) {
     return (
       <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
@@ -342,6 +350,7 @@ function App() {
     );
   }
 
+  // INTERFAZ PRINCIPAL
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: '#fff' }}>
@@ -436,6 +445,7 @@ function App() {
             </>
           )}
 
+          {/* VISTAS RESTANTES MANTENIDAS */}
           {vistaActual === 'historial' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
@@ -498,6 +508,7 @@ function App() {
           )}
         </div>
 
+        {/* MODALES MANTENIDOS */}
         <ModalNuevoViaje 
           visible={mostrarModalNuevoViaje} 
           onCancel={() => { setMostrarModalNuevoViaje(false); setDatosHeredados(null); }} 
