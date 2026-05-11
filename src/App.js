@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, History, FileText, Settings, Truck, Clock, Warehouse, Search, ArrowUp, ArrowDown, Trash2 } from 'lucide-react';
-import { DatePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm } from 'antd'; 
+import { Home, History, FileText, Settings, Truck, Clock, Warehouse, Search, ArrowUp, ArrowDown, Trash2, LogOut } from 'lucide-react';
+import { DatePicker, Select, Button, ConfigProvider, theme, Table, Input, Collapse, Empty, message, Popconfirm, Spin } from 'antd'; 
 import { db, auth } from './firebase';
 import { collection, deleteDoc, doc, updateDoc, query, orderBy, limit, onSnapshot, addDoc, getDocs } from 'firebase/firestore';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -33,9 +33,9 @@ function App() {
   const [choferes, setChoferes] = useState([]);
   const [clientes, setClientes] = useState([]);
   const [viajes, setViajes] = useState([]);
-  const [reportes, setReportes] = useState([]); 
+  const [reportes, setReportes] = useState([]);
   const [sugerencias, setSugerencias] = useState({ estatus: [], ubicacion: [], velocidad: [], lugar: [], caja: [], origen: [], destino: [] });
-
+  
   const [mostrarModalNuevoViaje, setMostrarModalNuevoViaje] = useState(false);
   const [datosHeredados, setDatosHeredados] = useState(null); 
   const [mostrarModalBitacora, setMostrarModalBitacora] = useState(false);
@@ -49,7 +49,6 @@ function App() {
   const [viajeATerminar, setViajeATerminar] = useState(null);
   const [selloActual, setSelloActual] = useState('');
   const [motivoSeleccionado, setMotivoSeleccionado] = useState('Taller');
-  
   const [editandoId, setEditandoId] = useState(null);
   const [tipoEdicion, setTipoEdicion] = useState(null);
   const [nuevoVehiculo, setNuevoVehiculo] = useState('');
@@ -70,18 +69,21 @@ function App() {
     return () => desuscribir();
   }, []);
 
-  const manejarIngreso = async (e) => {
-    e.preventDefault();
+  const manejarIngreso = async () => {
+    if (!correo || !contrasena) return;
     try {
       await signInWithEmailAndPassword(auth, correo, contrasena);
       setErrorIngreso('');
+      message.success("Acceso concedido");
     } catch (error) {
       setErrorIngreso('Credenciales incorrectas');
+      message.error("Error al iniciar sesión");
     }
   };
 
   const manejarSalida = async () => {
     await signOut(auth);
+    message.info("Sesión cerrada");
   };
 
   const cargarSugerencias = async () => {
@@ -103,6 +105,8 @@ function App() {
   };
 
   useEffect(() => {
+    if (!usuario) return;
+
     cargarSugerencias();
     const unsubVehiculos = onSnapshot(collection(db, "vehiculos"), (snap) => setUnidades(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubChoferes = onSnapshot(collection(db, "choferes"), (snap) => setChoferes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -110,8 +114,14 @@ function App() {
     const unsubViajes = onSnapshot(query(collection(db, "viajes"), orderBy("fechaCreacion", "desc"), limit(50)), (snap) => setViajes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubReportes = onSnapshot(query(collection(db, "reportes"), orderBy("fechaEnvio", "desc"), limit(100)), (snap) => setReportes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
-    return () => { unsubVehiculos(); unsubChoferes(); unsubClientes(); unsubViajes(); unsubReportes(); };
-  }, []);
+    return () => { 
+      unsubVehiculos(); 
+      unsubChoferes(); 
+      unsubClientes(); 
+      unsubViajes(); 
+      unsubReportes(); 
+    };
+  }, [usuario]);
 
   useEffect(() => {
     if (!viajeActivoRastreo?.id) return;
@@ -146,7 +156,7 @@ function App() {
       try {
         await addDoc(collection(db, "sugerencias_menu"), { categoria, valor: valor.trim() });
         cargarSugerencias();
-      } catch (e) { message.error("Error"); }
+      } catch (e) { message.error("Error al guardar sugerencia"); }
     }
   };
 
@@ -252,7 +262,7 @@ function App() {
   };
 
   const obtenerDatosTabla = () => {
-    if (pestañaActiva === 'yarda') return unidades; 
+    if (pestañaActiva === 'yarda') return unidades;
     return viajes.filter(v => v.estatus === pestañaActiva);
   };
 
@@ -287,7 +297,6 @@ function App() {
     if (viajesFiltradosReportes.length === 0) {
       return message.warning("No hay viajes en la tabla para exportar.");
     }
-    
     message.loading({ content: 'Construyendo Excel...', key: 'excelGen' });
     try {
       await generarExcelGeneral(viajesFiltradosReportes);
@@ -298,19 +307,35 @@ function App() {
   };
 
   if (cargandoUsuario) {
-    return <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000', color: '#fff' }}>Cargando sistema...</div>;
+    return (
+      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#000' }}>
+        <Spin size="large" tip="Cargando sistema..." />
+      </div>
+    );
   }
 
   if (!usuario) {
     return (
       <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
-        <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
+        <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
           <div style={{ width: '350px', padding: '40px', background: '#141414', borderRadius: '8px', border: '1px solid #333', textAlign: 'center' }}>
             <h2 style={{ marginBottom: '30px' }}>Transportes Vargas</h2>
-            <Input placeholder="Correo" value={correo} onChange={(e) => setCorreo(e.target.value)} style={{ marginBottom: '15px', background: '#262626', border: '1px solid #444', color: '#fff' }} />
-            <Input.Password placeholder="Contraseña" value={contrasena} onChange={(e) => setContrasena(e.target.value)} style={{ marginBottom: '20px', background: '#262626', border: '1px solid #444', color: '#fff' }} />
+            <Input 
+              placeholder="Correo" 
+              value={correo} 
+              onChange={(e) => setCorreo(e.target.value)} 
+              style={{ marginBottom: '15px' }} 
+              onPressEnter={manejarIngreso}
+            />
+            <Input.Password 
+              placeholder="Contraseña" 
+              value={contrasena} 
+              onChange={(e) => setContrasena(e.target.value)} 
+              style={{ marginBottom: '20px' }} 
+              onPressEnter={manejarIngreso}
+            />
             {errorIngreso && <p style={{ color: '#ff4d4f', marginBottom: '15px', fontSize: '12px' }}>{errorIngreso}</p>}
-            <Button type="primary" onClick={manejarIngreso} style={{ width: '100%', backgroundColor: '#007bff', fontWeight: 'bold', height: '40px' }}>Ingresar</Button>
+            <Button type="primary" onClick={manejarIngreso} block style={{ fontWeight: 'bold', height: '40px' }}>Ingresar</Button>
           </div>
         </div>
       </ConfigProvider>
@@ -319,29 +344,30 @@ function App() {
 
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
-      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: '#fff', fontFamily: 'sans-serif' }}>
+      <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: '#000', color: '#fff' }}>
         
-        <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #1a1a1a', padding: '20px 15px' }}>
-          <div style={{ color: '#666', fontSize: '13px', fontWeight: 'bold', marginBottom: '40px', paddingLeft: '10px' }}>Bitacora de foraneo</div>
-          <nav>
-            <div onClick={() => setVistaActual('inicio')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'inicio' ? '#1a1a1a' : 'transparent', fontSize: '18px', marginBottom: '8px' }}><Home size={22} /> Inicio</div>
-            <div onClick={() => setVistaActual('historial')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'historial' ? '#1a1a1a' : 'transparent', fontSize: '18px', marginBottom: '8px' }}><History size={22} /> Historial</div>
-            <div onClick={() => setVistaActual('reportes')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'reportes' ? '#1a1a1a' : 'transparent', fontSize: '18px', marginBottom: '8px' }}><FileText size={22} /> Reportes</div>
-            <div onClick={() => setVistaActual('configuracion')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'configuracion' ? '#1a1a1a' : 'transparent', fontSize: '18px' }}><Settings size={22} /> Configuracion</div>
-            <div onClick={manejarSalida} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: 'transparent', fontSize: '18px', color: '#ff4d4f', marginTop: '20px' }}>Salir del sistema</div>
+        <div style={{ width: '240px', backgroundColor: '#0a0a0a', borderRight: '1px solid #1a1a1a', padding: '20px 15px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ color: '#666', fontSize: '13px', fontWeight: 'bold', marginBottom: '40px', paddingLeft: '10px' }}>Bitácora de foráneo</div>
+          <nav style={{ flex: 1 }}>
+            <div onClick={() => setVistaActual('inicio')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'inicio' ? '#1a1a1a' : 'transparent', marginBottom: '8px' }}><Home size={22} /> Inicio</div>
+            <div onClick={() => setVistaActual('historial')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'historial' ? '#1a1a1a' : 'transparent', marginBottom: '8px' }}><History size={22} /> Historial</div>
+            <div onClick={() => setVistaActual('reportes')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'reportes' ? '#1a1a1a' : 'transparent', marginBottom: '8px' }}><FileText size={22} /> Reportes</div>
+            <div onClick={() => setVistaActual('configuracion')} style={{ display: 'flex', alignItems: 'center', gap: '15px', padding: '12px 15px', cursor: 'pointer', borderRadius: '8px', backgroundColor: vistaActual === 'configuracion' ? '#1a1a1a' : 'transparent' }}><Settings size={22} /> Configuración</div>
           </nav>
+          <div style={{ padding: '15px', borderTop: '1px solid #1a1a1a' }}>
+            <Button type="text" danger icon={<LogOut size={18} />} onClick={manejarSalida} block style={{ textAlign: 'left', padding: '0 15px' }}>Salir del sistema</Button>
+          </div>
         </div>
 
         <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
-          
           {vistaActual === 'inicio' && (
             <>
               <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                <h1 style={{ fontSize: '75px', margin: '0' }}>{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', hour12: false})}</h1>
+                <h1 style={{ fontSize: '75px', margin: '0' }}>{dayjs().format('HH:mm')}</h1>
                 <p style={{ color: '#fff', fontSize: '24px' }}>Registros encontrados</p>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '25px' }}>
-                  <Button type="primary" onClick={() => setMostrarModalBitacora(true)} style={{ backgroundColor: '#007bff', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Capturar bitacora</Button>
-                  <Button type="primary" danger onClick={() => setMostrarModalNuevoViaje(true)} style={{ backgroundColor: '#dc3545', height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Nuevo viaje</Button>
+                  <Button type="primary" onClick={() => setMostrarModalBitacora(true)} style={{ height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Capturar bitácora</Button>
+                  <Button type="primary" danger onClick={() => setMostrarModalNuevoViaje(true)} style={{ height: '45px', padding: '0 30px', fontWeight: 'bold' }}>Nuevo viaje</Button>
                 </div>
               </div>
 
@@ -355,11 +381,11 @@ function App() {
 
               <div style={{ marginTop: '30px' }}>
                 {pestañaActiva === 'viajes' && (
-                  <Table dataSource={obtenerDatosTabla()} rowKey="id" size="small" pagination={false} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes activos en este momento" /> }}
+                  <Table dataSource={obtenerDatosTabla()} rowKey="id" size="small" pagination={false} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes activos" /> }}
                     columns={[
                       { title: 'Acciones', width: 170, render: (_, record) => (
                           <div style={{ display: 'flex', gap: '8px' }}>
-                            <Popconfirm title="¿Enviar a espera?" onConfirm={() => handleMoverAEspera(record.id)} okText="Confirmar" cancelText="Cancelar"><Button size="small" style={{ backgroundColor: '#1677ff', color: 'white', border: 'none' }}>En espera</Button></Popconfirm>
+                            <Popconfirm title="¿Enviar a espera?" onConfirm={() => handleMoverAEspera(record.id)} okText="Confirmar" cancelText="Cancelar"><Button size="small" type="primary">En espera</Button></Popconfirm>
                             <Button danger size="small" onClick={() => { setViajeATerminar(record); setModalTerminarVisible(true); }}>Terminar</Button>
                           </div>
                         )
@@ -371,6 +397,7 @@ function App() {
                     ]}
                   />
                 )}
+        
                 {pestañaActiva === 'espera' && (
                   <div style={{ marginTop: '30px' }}>
                     <h2 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '30px' }}>Espera de carga</h2>
@@ -384,26 +411,23 @@ function App() {
                             {renderTagsViaje(v)}
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <Button type="primary" onClick={() => handleIniciarNuevoTramo(v)} style={{ backgroundColor: '#10b981', borderColor: '#10b981', fontWeight: 'bold' }}>
-                              Iniciar nuevo tramo
-                            </Button>
-                            <Popconfirm title="¿Borrar de espera?" onConfirm={() => handleEliminarEspera(v.id)} okText="Sí, borrar" cancelText="Cancelar" okButtonProps={{ danger: true }}>
-                              <Button danger icon={<Trash2 size={16} />} style={{ width: '100%' }}>Remover unidad</Button>
-                            </Popconfirm>
+                            <Button type="primary" onClick={() => handleIniciarNuevoTramo(v)} style={{ backgroundColor: '#10b981', borderColor: '#10b981', fontWeight: 'bold' }}>Iniciar nuevo tramo</Button>
+                            <Popconfirm title="¿Borrar de espera?" onConfirm={() => handleEliminarEspera(v.id)} okText="Sí" cancelText="No" okButtonProps={{ danger: true }}><Button danger icon={<Trash2 size={16} />}>Remover</Button></Popconfirm>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
+
                 {pestañaActiva === 'yarda' && (
                   <div style={{ marginTop: '20px' }}>
                     <h2 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '40px' }}>En Yarda</h2>
-                    <Table dataSource={obtenerDatosTabla()} rowKey="id" pagination={false} locale={{ emptyText: <Empty description="No hay unidades registradas en yarda" /> }}
+                    <Table dataSource={obtenerDatosTabla()} rowKey="id" pagination={false} locale={{ emptyText: <Empty description="No hay unidades en yarda" /> }}
                       columns={[
                         { title: 'Unidad', dataIndex: 'nombre' },
                         { title: 'Estado', dataIndex: 'estado', render: (est) => (<span style={{ color: (est === 'Listo' || !est) ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>{est || 'Listo'}</span>) },
-                        { title: 'Accion', render: (_, record) => (<Button danger={record.estado === 'Listo' || !record.estado} style={{ backgroundColor: (record.estado === 'Listo' || !record.estado) ? '#8b1a1a' : '#1677ff', border: 'none', color: 'white', width: '120px' }} onClick={() => handleAccionDisponibilidad(record)}> {(record.estado === 'Listo' || !record.estado) ? 'Deshabilitar' : 'Habilitar'} </Button>) }
+                        { title: 'Acción', render: (_, record) => (<Button danger={record.estado === 'Listo' || !record.estado} type="primary" style={{ backgroundColor: (record.estado === 'Listo' || !record.estado) ? '#8b1a1a' : '#1677ff', border: 'none' }} onClick={() => handleAccionDisponibilidad(record)}> {(record.estado === 'Listo' || !record.estado) ? 'Deshabilitar' : 'Habilitar'} </Button>) }
                       ]}
                     />
                   </div>
@@ -415,7 +439,7 @@ function App() {
           {vistaActual === 'historial' && (
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Historial de Viajes</h2>
-              <Table dataSource={viajes.filter(v => v.estatus === 'finalizado')} rowKey="id" size="small" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes finalizados aún" /> }}
+              <Table dataSource={viajes.filter(v => v.estatus === 'finalizado')} rowKey="id" size="small" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No hay viajes finalizados" /> }}
                 columns={[
                   { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> },
                   { title: 'Fecha', dataIndex: 'fecha' }, { title: 'Carta porte', dataIndex: 'cp' }, { title: 'Hora salida', dataIndex: 'hora' },
@@ -430,28 +454,18 @@ function App() {
             <div>
               <h2 style={{ textAlign: 'center', marginBottom: '30px' }}>Reportes</h2>
               <div style={{ display: 'flex', gap: '15px', marginBottom: '20px', background: '#141414', padding: '15px', borderRadius: '8px', border: '1px solid #333', flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: '200px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span><Input prefix={<Search size={16} color="#666" />} placeholder="Buscar unidad, folio, cliente..." value={textoBusqueda} onChange={(e) => setTextoBusqueda(e.target.value)} style={{ background: '#262626', border: '1px solid #444', color: '#fff' }} allowClear /></div>
-                <div style={{ width: '250px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span><RangePicker style={{ width: '100%' }} value={rangoFechas} onChange={setRangoFechas} getPopupContainer={t => t.parentNode} /></div>
-                <div style={{ width: '150px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span><Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Salida">Salida</Option><Option value="Regreso">Regreso</Option></Select></div>
-                <div style={{ width: '180px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span><Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }} getPopupContainer={t => t.parentNode}><Option value="Todos">Todos</Option><Option value="Nacional">Nacional 🇲🇽</Option><Option value="Exportacion">Exportación 🇺🇸</Option></Select></div>
-                
-                <div style={{ display: 'flex', alignItems: 'flex-end', marginLeft: 'auto' }}>
-                  <Button 
-                    type="primary" 
-                    icon={<FileText size={16} />} 
-                    onClick={handleDescargarReporteMasivo} 
-                    style={{ backgroundColor: '#107c41', borderColor: '#107c41', fontWeight: 'bold', height: '32px' }}
-                  >
-                    Exportar Reporte General
-                  </Button>
-                </div>
+                <div style={{ flex: 1, minWidth: '200px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Búsqueda General</span><Input prefix={<Search size={16} color="#666" />} placeholder="Buscar unidad, folio, cliente..." value={textoBusqueda} onChange={(e) => setTextoBusqueda(e.target.value)} allowClear /></div>
+                <div style={{ width: '250px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Rango de Fechas</span><RangePicker style={{ width: '100%' }} value={rangoFechas} onChange={setRangoFechas} /></div>
+                <div style={{ width: '150px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Movimiento</span><Select value={filtroMovimiento} onChange={setFiltroMovimiento} style={{ width: '100%' }}><Option value="Todos">Todos</Option><Option value="Salida">Salida</Option><Option value="Regreso">Regreso</Option></Select></div>
+                <div style={{ width: '180px' }}><span style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#bbb' }}>Servicio</span><Select value={filtroServicio} onChange={setFiltroServicio} style={{ width: '100%' }}><Option value="Todos">Todos</Option><Option value="Nacional">Nacional 🇲🇽</Option><Option value="Exportacion">Exportación 🇺🇸</Option></Select></div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', marginLeft: 'auto' }}><Button type="primary" icon={<FileText size={16} />} onClick={handleDescargarReporteMasivo} style={{ backgroundColor: '#107c41', borderColor: '#107c41', fontWeight: 'bold' }}>Exportar Excel</Button></div>
               </div>
-              <Table dataSource={viajesFiltradosReportes} size="small" rowKey="id" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="No se encontraron reportes con esos filtros" /> }}
+              <Table dataSource={viajesFiltradosReportes} size="small" rowKey="id" pagination={{ pageSize: 15 }} expandable={{ expandedRowRender: (record) => <HistorialViaje viaje={record} /> }} locale={{ emptyText: <Empty description="Sin resultados" /> }}
                 columns={[
                   { title: 'Folio', dataIndex: 'clave', render: text => <span style={{color: '#3b82f6', fontWeight: 'bold'}}>{text || 'S/F'}</span> },
                   { title: 'Unidad', render: (_, r) => (<div style={{display:'flex', flexDirection:'column', alignItems:'flex-start'}}><span style={{fontWeight:'bold'}}>{r.unidad}</span>{renderTagsViaje(r)}</div>) },
                   { title: 'Salida', dataIndex: 'salida' }, { title: 'Chofer', dataIndex: 'chofer' }, { title: 'Caja', dataIndex: 'caja' }, { title: 'Origen', dataIndex: 'origen' }, { title: 'Destino', dataIndex: 'destino' }, { title: 'Llegada', dataIndex: 'llegada' },
-                  { title: 'Acciones', render: (_, record) => (<Button danger size="small" onClick={() => { setViajeActivoRastreo(record); setSelloActual(record.sello || 'Pendiente'); setMostrarModalRastreo(true); }} style={{ fontSize: '11px', backgroundColor: 'rgba(255,0,0,0.1)', border: '1px solid #ff4d4f' }}>Rastreo especial de viaje</Button>) }
+                  { title: 'Acciones', render: (_, record) => (<Button danger size="small" onClick={() => { setViajeActivoRastreo(record); setSelloActual(record.sello || 'Pendiente'); setMostrarModalRastreo(true); }} style={{ fontSize: '11px' }}>Rastreo especial</Button>) }
                 ]}
               />
             </div>
@@ -459,51 +473,43 @@ function App() {
 
           {vistaActual === 'configuracion' && (
             <div>
-              <h2 style={{ textAlign: 'center', marginBottom: '40px' }}>Configuracion</h2>
+              <h2 style={{ textAlign: 'center', marginBottom: '40px' }}>Configuración</h2>
               <Collapse ghost expandIconPosition="end">
-                <Panel header="Vehiculos" key="1" style={{ borderBottom: '1px solid #222' }}>
+                <Panel header="Vehículos" key="1" style={{ borderBottom: '1px solid #222' }}>
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
-                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del vehiculo</p><Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('vehiculos')}>{editandoId && tipoEdicion === 'vehiculos' ? 'Guardar Cambios' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
-                    <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehiculo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('vehiculos', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
+                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del vehículo</p><Input value={nuevoVehiculo} onChange={e => setNuevoVehiculo(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('vehiculos')}>{editandoId && tipoEdicion === 'vehiculos' ? 'Guardar' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
+                    <div style={{ flex: 1 }}><Table dataSource={unidades} columns={[{ title: 'Vehículo', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button size="small" onClick={() => prepararEdicion('vehiculos', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('vehiculos', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
                 <Panel header="Choferes" key="2" style={{ borderBottom: '1px solid #222' }}>
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
-                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del chofer</p><Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('choferes')}>{editandoId && tipoEdicion === 'choferes' ? 'Guardar Cambios' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
-                    <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('choferes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
+                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del chofer</p><Input value={nuevoChofer} onChange={e => setNuevoChofer(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('choferes')}>{editandoId && tipoEdicion === 'choferes' ? 'Guardar' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
+                    <div style={{ flex: 1 }}><Table dataSource={choferes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button size="small" onClick={() => prepararEdicion('choferes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('choferes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
                 <Panel header="Clientes" key="3" style={{ borderBottom: '1px solid #222' }}>
                   <div style={{ display: 'flex', gap: '50px', padding: '20px' }}>
-                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del Cliente</p><Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} /><p>Correo</p><Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('clientes')}>{editandoId && tipoEdicion === 'clientes' ? 'Guardar Cambios' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
-                    <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button style={{ borderColor: '#ffa940', color: '#ffa940' }} size="small" onClick={() => prepararEdicion('clientes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
+                    <div style={{ width: '250px', textAlign: 'center' }}><p>Nombre del Cliente</p><Input value={nuevoCliente} onChange={e => setNuevoCliente(e.target.value)} style={{ marginBottom: '10px' }} /><p>Correo</p><Input value={correoNuevo} onChange={e => setCorreoNuevo(e.target.value)} style={{ marginBottom: '15px' }} /><div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}><Button type="primary" onClick={() => handleAgregar('clientes')}>{editandoId && tipoEdicion === 'clientes' ? 'Guardar' : 'Agregar'}</Button><Button onClick={cancelarEdicion}>Cancelar</Button></div></div>
+                    <div style={{ flex: 1 }}><Table dataSource={clientes} columns={[{ title: 'Nombre', dataIndex: 'nombre' }, { title: 'Correo', dataIndex: 'correo' }, { title: 'Acciones', render: (_, r) => <div style={{ display: 'flex', gap: '8px' }}><Button size="small" onClick={() => prepararEdicion('clientes', r)}>Editar</Button><Button danger size="small" onClick={() => handleEliminar('clientes', r.id)}>Eliminar</Button></div> }]} size="small" rowKey="id" /></div>
                   </div>
                 </Panel>
               </Collapse>
             </div>
           )}
-
         </div>
 
         <ModalNuevoViaje 
           visible={mostrarModalNuevoViaje} 
-          onCancel={() => {
-            setMostrarModalNuevoViaje(false);
-            setDatosHeredados(null);
-          }} 
-          datosHeredados={datosHeredados}
-          unidades={unidades} choferes={choferes} clientes={clientes} viajes={viajes} 
-          sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} 
-          eliminarSugerencia={eliminarSugerencia} 
+          onCancel={() => { setMostrarModalNuevoViaje(false); setDatosHeredados(null); }} 
+          datosHeredados={datosHeredados} unidades={unidades} choferes={choferes} clientes={clientes} viajes={viajes} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} 
         />
         <ModalBitacora visible={mostrarModalBitacora} onCancel={() => setMostrarModalBitacora(false)} unidades={unidades} viajes={viajes} clientes={clientes} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} renderTagsViaje={renderTagsViaje} />
         <ModalTerminarViaje visible={modalTerminarVisible} onCancel={() => setModalTerminarVisible(false)} onConfirm={confirmarTerminarViaje} />
         <ModalMotivoDeshabilitar visible={mostrarModalMotivo} onCancel={() => setMostrarModalMotivo(false)} onOk={confirmarDeshabilitar} unidadNombre={unidadAfectada?.nombre} motivo={motivoSeleccionado} setMotivo={setMotivoSeleccionado} />
         <ModalRastreoEspecial visible={mostrarModalRastreo} onCancel={() => setMostrarModalRastreo(false)} viaje={viajeActivoRastreo} puntos={puntosRevision} sugerencias={sugerencias} guardarSugerenciaAutomatica={guardarSugerenciaAutomatica} eliminarSugerencia={eliminarSugerencia} selloActual={selloActual} setSelloActual={setSelloActual} />
-
       </div>
     </ConfigProvider>
   );
 }
-  
+
 export default App;
